@@ -1,30 +1,24 @@
 <?php
 
 /**
- * Lombardia Informatica S.p.A.
+ * Aria S.p.A.
  * OPEN 2.0
  *
  *
- * @package    lispa\amos\mobile\bridge
+ * @package    open20\amos\mobile\bridge
  * @category   CategoryName
  */
 
-namespace lispa\amos\mobile\bridge\modules\v1\actions\entitydata\parsers;
+namespace open20\amos\mobile\bridge\modules\v1\actions\entitydata\parsers;
 
-use lispa\amos\admin\models\UserProfile;
-use lispa\amos\community\models\Community;
-use lispa\amos\core\record\Record;
-use lispa\amos\discussioni\models\DiscussioniTopic;
-use lispa\amos\discussioni\models\search\DiscussioniTopicSearch;
-use lispa\amos\mobile\bridge\modules\v1\models\AccessTokens;
-use lispa\amos\mobile\bridge\modules\v1\models\User;
-use lispa\amos\news\models\News;
-use yii\base\Exception;
-use yii\data\ActiveDataProvider;
-use yii\db\ActiveQuery;
-use yii\helpers\Json;
+use open20\amos\admin\models\UserProfile;
+use open20\amos\core\models\ContentShared;
+use open20\amos\discussioni\models\DiscussioniTopic;
+use open20\amos\discussioni\models\search\DiscussioniTopicSearch;
+use Yii;
+use yii\helpers\StringHelper;
 
-class DiscussioniParser
+class DiscussioniParser extends BaseParser
 {
     /**
      * Get all items
@@ -94,7 +88,7 @@ class DiscussioniParser
     public static function parseItem($item)
     {
         //The base class name
-        $baseClassName = \yii\helpers\StringHelper::basename(DiscussioniTopic::className());
+        $baseClassName = StringHelper::basename(DiscussioniTopic::className());
 
         //Read permission name
         $readPremission = strtoupper($baseClassName . '_READ');
@@ -103,7 +97,7 @@ class DiscussioniParser
         $editPremission = strtoupper($baseClassName . '_UPDATE');
 
         //Can user view element
-        $canView = \Yii::$app->user->can($readPremission, ['model' => $model]);
+        $canView = Yii::$app->user->can($readPremission, ['model' => $item]);
 
         if ($canView) {
             //Define temp item
@@ -135,18 +129,46 @@ class DiscussioniParser
                     'presentazione_breve' => $owner->presentazione_breve,
                     'avatarUrl' => $owner->avatarWebUrl,
                 ],
-                'newsImageUrl' => $image ? \Yii::$app->getUrlManager()->createAbsoluteUrl($image->getWebUrl()) : null,
+                'newsImageUrl' => $image ? Yii::$app->getUrlManager()->createAbsoluteUrl($image->getWebUrl()) : null,
             ];
-
+            $url = '';
+            if (self::isContentShared($item)) {
+                $view_url = $item->getViewUrl();
+                $url = substr($view_url, 0, strrpos($view_url, "/")) . '/public' . "?id=" . $item->id;
+            }
+            $newItem['shareUrl'] = $url;
+            $newItem['likeMe'] = self::isLikeMe($item);
+            $newItem['countLikeMe'] = self::getCountLike($item);
             //Remove id as is not needed
             unset($newItem['fields']['id']);
 
             //Can edit
-            $newItem['canEdit'] = \Yii::$app->user->can($editPremission, ['model' => $model]);
+            $newItem['canEdit'] = Yii::$app->user->can($editPremission, ['model' => $item]);
 
             return $newItem;
         }
 
         return [];
+    }
+    
+    /**
+     * 
+     * @param type $model
+     * @return boolean
+     */
+    private static function isContentShared($model) {
+        $obj = $model;
+        if ($obj) {
+            $classname = get_class($obj);
+            $contentShared = ContentShared::find()
+                            ->innerJoinWith('modelsClassname')
+                            ->andWhere(['classname' => $classname, 'content_id' => $obj->id])->one();
+
+            if ($contentShared) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

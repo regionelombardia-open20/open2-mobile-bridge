@@ -1,47 +1,38 @@
 <?php
-
 /**
- * Lombardia Informatica S.p.A.
+ * Aria S.p.A.
  * OPEN 2.0
  *
  *
- * @package    lispa\amos\mobile\bridge
+ * @package    open20\amos\mobile\bridge
  * @category   CategoryName
  */
+namespace open20\amos\mobile\bridge;
 
-namespace lispa\amos\mobile\bridge;
-
-use lispa\amos\chat\AmosChat;
-use lispa\amos\chat\models\Message;
-use lispa\amos\comments\models\Comment;
-use lispa\amos\comments\models\CommentReply;
-use lispa\amos\core\module\AmosModule;
-use lispa\amos\mobile\bridge\controllers\NotificationController;
-use lispa\amos\mobile\bridge\modules\v1\models\AccessTokens;
-use lispa\amos\mobile\bridge\modules\v1\models\ChatMessages;
-use lispa\amos\mobile\bridge\modules\v1\models\User;
-use lispa\amos\notificationmanager\AmosNotify;
-use lispa\amos\notificationmanager\behaviors\NotifyBehavior;
-use lispa\amos\notificationmanager\models\Notification;
+use open20\amos\core\module\AmosModule;
+use open20\amos\mobile\bridge\controllers\NotificationController;
+use open20\amos\mobile\bridge\modules\v1\V1;
+use Yii;
 use yii\base\BootstrapInterface;
 use yii\base\Event;
 use yii\db\ActiveRecord;
 use yii\helpers\ArrayHelper;
+use yii\httpclient\Exception;
 use yii\web\Application;
-use paragraph1\phpFCM\Recipient\Device;
 
 /**
  * Class Module
- * @package lispa\amos\mobile\bridge
+ * @package open20\amos\mobile\bridge
  */
 class Module extends AmosModule implements BootstrapInterface
 {
+
     public static $CONFIG_FOLDER = 'config';
 
     /**
      * @inheritdoc
      */
-    static $name = 'amosmobilebridge';
+    static $name = 'mobilebridge';
 
     /**
      * @var string|boolean the layout that should be applied for views within this module. This refers to a view name
@@ -53,8 +44,7 @@ class Module extends AmosModule implements BootstrapInterface
     /**
      * @inheritdoc
      */
-    public $controllerNamespace = 'lispa\amos\mobile\bridge\controllers';
-
+    public $controllerNamespace = 'open20\amos\mobile\bridge\controllers';
     public $timeout = 180;
 
     /**
@@ -66,15 +56,18 @@ class Module extends AmosModule implements BootstrapInterface
 
         //Configuration
         $config = require(__DIR__ . DIRECTORY_SEPARATOR . 'config' . DIRECTORY_SEPARATOR . 'config.php');
-        \Yii::configure($this, ArrayHelper::merge($config, $this));
+        Yii::configure($this, ArrayHelper::merge($config, $this));
 
-        //if(\Yii::$app->controller && get_class(\Yii::$app->controller->module) == self::className()) {
-        //Override user identity
-        \Yii::$app->set('user', $this->user);
+        if (!is_null(Yii::$app->request)) {
+            if (strpos(Yii::$app->request->url, self::getModuleName())) {
 
-        //Override request component
-        \Yii::$app->set('request', $this->request);
-        //}
+                //Override user identity
+                Yii::$app->set('user', $this->user);
+
+                //Override request component
+                Yii::$app->set('request', $this->request);
+            }
+        }
     }
 
     public function bootstrap($app)

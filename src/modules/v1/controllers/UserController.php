@@ -1,15 +1,15 @@
 <?php
 
 /**
- * Lombardia Informatica S.p.A.
+ * Aria S.p.A.
  * OPEN 2.0
  *
  *
- * @package    lispa\amos\mobile\bridge
+ * @package    open20\amos\mobile\bridge
  * @category   CategoryName
  */
 
-namespace lispa\amos\mobile\bridge\modules\v1\controllers;
+namespace open20\amos\mobile\bridge\modules\v1\controllers;
 
 
 use yii\filters\auth\CompositeAuth;

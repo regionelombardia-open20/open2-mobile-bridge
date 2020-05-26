@@ -1,22 +1,22 @@
 <?php
 
 /**
- * Lombardia Informatica S.p.A.
+ * Aria S.p.A.
  * OPEN 2.0
  *
  *
- * @package    lispa\amos\mobile\bridge
+ * @package    open20\amos\mobile\bridge
  * @category   CategoryName
  */
 
-namespace lispa\amos\mobile\bridge\modules\v1\controllers;
+namespace open20\amos\mobile\bridge\modules\v1\controllers;
 
-use lispa\amos\core\record\Record;
-use lispa\amos\mobile\bridge\modules\v1\actions\entitydata\ActionEditItem;
-use lispa\amos\mobile\bridge\modules\v1\actions\entitydata\ActionListItems;
-use lispa\amos\mobile\bridge\modules\v1\actions\entitydata\ActionViewItem;
-use lispa\amos\mobile\bridge\modules\v1\models\AccessTokens;
-use lispa\amos\mobile\bridge\modules\v1\models\User;
+use open20\amos\core\record\Record;
+use open20\amos\mobile\bridge\modules\v1\actions\entitydata\ActionEditItem;
+use open20\amos\mobile\bridge\modules\v1\actions\entitydata\ActionListItems;
+use open20\amos\mobile\bridge\modules\v1\actions\entitydata\ActionViewItem;
+use open20\amos\mobile\bridge\modules\v1\models\AccessTokens;
+use open20\amos\mobile\bridge\modules\v1\models\User;
 use yii\filters\auth\CompositeAuth;
 use yii\filters\auth\HttpBearerAuth;
 use yii\helpers\ArrayHelper;
@@ -32,7 +32,7 @@ class EntityDataController extends Controller
         $behaviours = parent::behaviors();
         unset($behaviours['authenticator']);
 
-        return ArrayHelper::merge($behaviours, [
+        return ArrayHelper::merge($behaviours,[
             'authenticator' => [
                 'class' => CompositeAuth::className(),
                 'authMethods' => [

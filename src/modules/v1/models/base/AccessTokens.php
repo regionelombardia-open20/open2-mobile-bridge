@@ -1,13 +1,13 @@
 <?php
 /**
- * Lombardia Informatica S.p.A.
+ * Aria S.p.A.
  * OPEN 2.0
  *
  *
  * @package    amos-mobile-bridge
  * @category   CategoryName
  */
-namespace lispa\amos\mobile\bridge\modules\v1\models\base;
+namespace open20\amos\mobile\bridge\modules\v1\models\base;
 
 use common\components\record\Record;
 use Yii;
@@ -16,7 +16,7 @@ use Yii;
  * This is the model class for table "access_tokens".
  *
  */
-class AccessTokens extends \lispa\amos\core\record\Record
+class AccessTokens extends \open20\amos\core\record\Record
 {
     /**
      * @inheritdoc

@@ -1,18 +1,18 @@
 <?php
 
 /**
- * Lombardia Informatica S.p.A.
+ * Aria S.p.A.
  * OPEN 2.0
  *
  *
- * @package    lispa\amos\mobile\bridge
+ * @package    open20\amos\mobile\bridge
  * @category   CategoryName
  */
 
-namespace lispa\amos\mobile\bridge\modules\v1\actions\security;
+namespace open20\amos\mobile\bridge\modules\v1\actions\security;
 
-use lispa\amos\mobile\bridge\modules\v1\models\AccessTokens;
-use lispa\amos\mobile\bridge\modules\v1\models\User;
+use open20\amos\mobile\bridge\modules\v1\models\AccessTokens;
+use open20\amos\mobile\bridge\modules\v1\models\User;
 use yii\base\Exception;
 use yii\helpers\Json;
 use yii\rest\Action;
@@ -54,23 +54,21 @@ class ActionLogin extends Action
 
                 if ($User && $User->validatePassword($LoginForm->password)) {
 
-                    $User->refreshAccessToken($tokenDevice, $osDevice);
+                    $token = $User->refreshAccessToken($tokenDevice, $osDevice);
 
                     $User->save();
-//return $User->extraFields();
                     $result = $User->toArray(
                         [
                             'id',
                             'username',
                             'email',
-                            'accessToken',
-                            'fcmToken',
                             'slimProfile',
                             'userImage',
                         ]
                     );
 
-                    $result['access_token'] = $result['accessToken'];
+                    $result['access_token'] = $token->access_token;
+                    $result['fcm_token'] = $token->fcm_token;
 
                     return $result;
                 }

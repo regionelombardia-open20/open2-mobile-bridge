@@ -1,10 +1,19 @@
 <?php
-namespace lispa\amos\mobile\bridge\modules\v1\models;
 
-use lispa\amos\mobile\bridge\Module;
+/**
+ * Aria S.p.A.
+ * OPEN 2.0
+ *
+ *
+ * @package    Open20Package
+ * @category   CategoryName
+ */
+namespace open20\amos\mobile\bridge\modules\v1\models;
+
+use open20\amos\mobile\bridge\Module;
 use Yii;
 
-class ChatMessages extends \lispa\amos\core\record\Record
+class ChatMessages extends \open20\amos\core\record\Record
 {
     /**
      * Override connection to prevent charset whithout emoji support

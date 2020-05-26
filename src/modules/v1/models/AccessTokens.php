@@ -1,18 +1,18 @@
 <?php
 /**
- * Lombardia Informatica S.p.A.
+ * Aria S.p.A.
  * OPEN 2.0
  *
  *
  * @package    amos-mobile-bridge
  * @category   CategoryName
  */
-namespace lispa\amos\mobile\bridge\modules\v1\models;
+namespace open20\amos\mobile\bridge\modules\v1\models;
 
 use common\components\helpers\UserHelper;
 use yii\db\Expression;
 
-class AccessTokens extends \lispa\amos\mobile\bridge\modules\v1\models\base\AccessTokens
+class AccessTokens extends \open20\amos\mobile\bridge\modules\v1\models\base\AccessTokens
 {
 
     public static function primaryKey()

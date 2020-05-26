@@ -1,31 +1,24 @@
 <?php
 
 /**
- * Lombardia Informatica S.p.A.
+ * Aria S.p.A.
  * OPEN 2.0
  *
  *
- * @package    lispa\amos\mobile\bridge
+ * @package    open20\amos\mobile\bridge
  * @category   CategoryName
  */
 
-namespace lispa\amos\mobile\bridge\modules\v1\controllers;
+namespace open20\amos\mobile\bridge\modules\v1\controllers;
 
-
-use lispa\amos\chat\models\Conversation;
-use lispa\amos\core\record\Record;
-use lispa\amos\mobile\bridge\modules\v1\actions\comments\ActionItemComments;
-use lispa\amos\mobile\bridge\modules\v1\actions\comments\ActionItemPushComment;
-use yii\db\ActiveQuery;
+use open20\amos\core\record\Record;
+use open20\amos\mobile\bridge\modules\v1\actions\comments\ActionItemComments;
+use open20\amos\mobile\bridge\modules\v1\actions\comments\ActionItemPushComment;
+use open20\amos\mobile\bridge\modules\v1\actions\comments\ActionItemPushCommentReply;
 use yii\filters\auth\CompositeAuth;
 use yii\filters\auth\HttpBearerAuth;
-use yii\filters\ContentNegotiator;
-use yii\filters\Cors;
-use yii\filters\RateLimiter;
-use yii\filters\VerbFilter;
 use yii\helpers\ArrayHelper;
 use yii\rest\Controller;
-use yii\web\Response;
 
 class CommentsController extends Controller
 {
@@ -67,6 +60,10 @@ class CommentsController extends Controller
             ],
             'item-push-comment' => [
                 'class' => ActionItemPushComment::className(),
+                'modelClass' => Record::className(),
+            ],
+            'item-push-comment-reply' => [
+                'class' => ActionItemPushCommentReply::className(),
                 'modelClass' => Record::className(),
             ],
         ];

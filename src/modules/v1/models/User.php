@@ -1,6 +1,6 @@
 <?php
 /**
- * Lombardia Informatica S.p.A.
+ * Aria S.p.A.
  * OPEN 2.0
  *
  *
@@ -8,13 +8,13 @@
  * @category   CategoryName
  */
 
-namespace lispa\amos\mobile\bridge\modules\v1\models;
+namespace open20\amos\mobile\bridge\modules\v1\models;
 
-use lispa\amos\admin\models\UserProfile;
+use open20\amos\admin\models\UserProfile;
 use yii\db\ActiveRecord;
 use yii\web\IdentityInterface;
 
-class User extends \lispa\amos\core\user\User
+class User extends \open20\amos\core\user\User
 {
     /**
      * @return array
@@ -77,14 +77,24 @@ class User extends \lispa\amos\core\user\User
         return false;
     }
 
+    /**
+     * 
+     * @param type $deviceToken
+     * @param type $deviceOs
+     * @return \open20\amos\mobile\bridge\modules\v1\models\AccessTokens
+     */
     public function refreshAccessToken($deviceToken, $deviceOs)
     {
-        $token = new AccessTokens();
-        $token->user_id = $this->id;
-        $token->access_token = \Yii::$app->getSecurity()->generateRandomString();
-        $token->fcm_token = $deviceToken;
-        $token->device_os = $deviceOs;
-        $token->save(false);
+        $token = AccessTokens::find()->andWhere(['fcm_token' => $deviceToken])
+            ->andWhere([ 'device_os' => $deviceOs])->one();
+        if(is_null($token)){
+            $token = new AccessTokens();
+            $token->user_id = $this->id;
+            $token->access_token = \Yii::$app->getSecurity()->generateRandomString();
+            $token->fcm_token = $deviceToken;
+            $token->device_os = $deviceOs;
+            $token->save(false);
+        }
         return $token;
     }
 }

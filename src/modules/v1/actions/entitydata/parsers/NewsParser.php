@@ -1,31 +1,25 @@
 <?php
-
 /**
- * Lombardia Informatica S.p.A.
+ * Aria S.p.A.
  * OPEN 2.0
  *
  *
- * @package    lispa\amos\mobile\bridge
+ * @package    open20\amos\mobile\bridge
  * @category   CategoryName
  */
+namespace open20\amos\mobile\bridge\modules\v1\actions\entitydata\parsers;
 
-namespace lispa\amos\mobile\bridge\modules\v1\actions\entitydata\parsers;
-
-use lispa\amos\news\models\search\NewsSearch;
+use open20\amos\admin\models\UserProfile;
+use open20\amos\core\models\ContentShared;
+use open20\amos\news\models\base\News as News2;
+use open20\amos\news\models\News;
+use open20\amos\news\models\search\NewsSearch;
 use Yii;
-use lispa\amos\admin\models\UserProfile;
-use lispa\amos\community\models\Community;
-use lispa\amos\core\record\Record;
-use lispa\amos\mobile\bridge\modules\v1\models\AccessTokens;
-use lispa\amos\mobile\bridge\modules\v1\models\User;
-use lispa\amos\news\models\News;
-use yii\base\Exception;
-use yii\data\ActiveDataProvider;
-use yii\db\ActiveQuery;
-use yii\helpers\Json;
+use yii\helpers\StringHelper;
 
-class NewsParser
+class NewsParser extends BaseParser
 {
+
     /**
      * Get all news
      * @param $namespace
@@ -38,7 +32,7 @@ class NewsParser
         $offset = $bodyParams['offset'] * 20;
 
         //Check limit is set
-        $limit = (int)$bodyParams['limit'] ?: 20;
+        $limit = (int) $bodyParams['limit'] ?: 20;
 
         //Instance search model
         $newsSearch = new NewsSearch();
@@ -95,7 +89,7 @@ class NewsParser
     {
 
         //The base class name
-        $baseClassName = \yii\helpers\StringHelper::basename(\lispa\amos\news\models\base\News::className());
+        $baseClassName = StringHelper::basename(News2::className());
 
         //Read permission name
         $readPremission = strtoupper($baseClassName . '_READ');
@@ -104,7 +98,7 @@ class NewsParser
         $editPremission = strtoupper($baseClassName . '_UPDATE');
 
         //Can user view element
-        $canView = \Yii::$app->user->can($readPremission, ['model' => $item]);
+        $canView = Yii::$app->user->can($readPremission, ['model' => $item]);
 
         if ($canView) {
             //Define temp item
@@ -129,7 +123,6 @@ class NewsParser
                 'sottotitolo' => $item->sottotitolo,
                 'descrizione_breve' => html_entity_decode(strip_tags($item->descrizione_breve)),
                 'descrizione' => html_entity_decode(strip_tags($item->descrizione)),
-
                 'data_pubblicazione' => $item->data_pubblicazione,
                 'created_at' => $item->created_at,
                 'created_by' => $item->created_by,
@@ -140,18 +133,47 @@ class NewsParser
                     'presentazione_breve' => $owner->presentazione_breve,
                     'avatarUrl' => $owner->avatarWebUrl,
                 ],
-                'newsImageUrl' => $image ? \Yii::$app->getUrlManager()->createAbsoluteUrl($image->getWebUrl()) : null,
+                'newsImageUrl' => $image ? Yii::$app->getUrlManager()->createAbsoluteUrl($image->getWebUrl()) : null,
             ];
-
+            $url = '';
+            if (self::isContentShared($item)) {
+                $view_url = $item->getViewUrl();
+                $url = substr($view_url, 0, strrpos($view_url, "/")) . '/public' . "?id=" . $item->id;
+            }
+            $newItem['shareUrl'] = $url;
+            $newItem['likeMe'] = self::isLikeMe($item);
+            $newItem['countLikeMe'] = self::getCountLike($item);
             //Remove id as is not needed
             unset($newItem['fields']['id']);
 
             //Can edit
-            $newItem['canEdit'] = \Yii::$app->user->can($editPremission, ['model' => $item]);
+            $newItem['canEdit'] = Yii::$app->user->can($editPremission, ['model' => $item]);
 
             return $newItem;
         }
 
         return [];
+    }
+
+    /**
+     * 
+     * @param type $model
+     * @return boolean
+     */
+    private static function isContentShared($model)
+    {
+        $obj = $model;
+        if ($obj) {
+            $classname = get_class($obj);
+            $contentShared = ContentShared::find()
+                    ->innerJoinWith('modelsClassname')
+                    ->andWhere(['classname' => $classname, 'content_id' => $obj->id])->one();
+
+            if ($contentShared) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

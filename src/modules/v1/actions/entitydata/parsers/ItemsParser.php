@@ -1,24 +1,24 @@
 <?php
 
 /**
- * Lombardia Informatica S.p.A.
+ * Aria S.p.A.
  * OPEN 2.0
  *
  *
- * @package    lispa\amos\mobile\bridge
+ * @package    open20\amos\mobile\bridge
  * @category   CategoryName
  */
 
-namespace lispa\amos\mobile\bridge\modules\v1\actions\entitydata\parsers;
+namespace open20\amos\mobile\bridge\modules\v1\actions\entitydata\parsers;
 
-use lispa\amos\news\models\search\NewsSearch;
+use open20\amos\news\models\search\NewsSearch;
 use Yii;
-use lispa\amos\admin\models\UserProfile;
-use lispa\amos\community\models\Community;
-use lispa\amos\core\record\Record;
-use lispa\amos\mobile\bridge\modules\v1\models\AccessTokens;
-use lispa\amos\mobile\bridge\modules\v1\models\User;
-use lispa\amos\news\models\News;
+use open20\amos\admin\models\UserProfile;
+use open20\amos\community\models\Community;
+use open20\amos\core\record\Record;
+use open20\amos\mobile\bridge\modules\v1\models\AccessTokens;
+use open20\amos\mobile\bridge\modules\v1\models\User;
+use open20\amos\news\models\News;
 use yii\base\Exception;
 use yii\data\ActiveDataProvider;
 use yii\db\ActiveQuery;
@@ -113,7 +113,7 @@ class ItemsParser
         $itemsArray = [];
 
         //The base class name
-        $baseClassName = \yii\helpers\StringHelper::basename(\lispa\amos\news\models\base\News::className());
+        $baseClassName = \yii\helpers\StringHelper::basename(\open20\amos\news\models\base\News::className());
 
         //Read permission name
         $readPremission = strtoupper($baseClassName . '_READ');

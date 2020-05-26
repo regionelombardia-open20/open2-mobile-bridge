@@ -1,23 +1,23 @@
 <?php
 
 /**
- * Lombardia Informatica S.p.A.
+ * Aria S.p.A.
  * OPEN 2.0
  *
  *
- * @package    lispa\amos\mobile\bridge
+ * @package    open20\amos\mobile\bridge
  * @category   CategoryName
  */
 
-namespace lispa\amos\mobile\bridge\modules\v1;
+namespace open20\amos\mobile\bridge\modules\v1;
 
-use lispa\amos\core\module\AmosModule;
-use lispa\amos\mobile\bridge\modules\v1\models\User;
+use open20\amos\core\module\AmosModule;
+use open20\amos\mobile\bridge\modules\v1\models\User;
 use yii\helpers\ArrayHelper;
 
 /**
  * Class Module
- * @package lispa\amos\mobile\bridge
+ * @package open20\amos\mobile\bridge
  */
 class V1 extends AmosModule
 {
@@ -38,7 +38,7 @@ class V1 extends AmosModule
     /**
      * @inheritdoc
      */
-    public $controllerNamespace = 'lispa\amos\mobile\bridge\modules\v1\controllers';
+    public $controllerNamespace = 'open20\amos\mobile\bridge\modules\v1\controllers';
 
     /**
      * @return static

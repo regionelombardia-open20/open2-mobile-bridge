@@ -1,28 +1,34 @@
 <?php
-
 /**
- * Lombardia Informatica S.p.A.
+ * Aria S.p.A.
  * OPEN 2.0
  *
  *
- * @package    lispa\amos\mobile\bridge
+ * @package    open20\amos\mobile\bridge
  * @category   CategoryName
  */
+namespace open20\amos\mobile\bridge\modules\v1\controllers;
 
-namespace lispa\amos\mobile\bridge\modules\v1\controllers;
-
-use lispa\amos\mobile\bridge\modules\v1\actions\security\ActionVerifyAuth;
-use lispa\amos\mobile\bridge\modules\v1\models\AccessTokens;
-use lispa\amos\admin\models\LoginForm;
-use lispa\amos\mobile\bridge\modules\v1\actions\security\ActionLogin;
-use lispa\amos\mobile\bridge\modules\v1\actions\security\ActionLogout;
+use open20\amos\admin\AmosAdmin;
+use open20\amos\admin\models\ForgotPasswordForm;
+use open20\amos\admin\models\LoginForm;
+use open20\amos\admin\models\UserProfile;
+use open20\amos\admin\utility\UserProfileUtility;
+use open20\amos\mobile\bridge\modules\v1\actions\security\ActionLogin;
+use open20\amos\mobile\bridge\modules\v1\actions\security\ActionLogout;
+use open20\amos\mobile\bridge\modules\v1\actions\security\ActionVerifyAuth;
+use open20\amos\mobile\bridge\modules\v1\models\AccessTokens;
+use Exception;
+use Yii;
 use yii\filters\auth\CompositeAuth;
 use yii\filters\auth\HttpBearerAuth;
 use yii\helpers\ArrayHelper;
 use yii\rest\Controller;
+use yii\swiftmailer\Logger;
 
 class SecurityController extends Controller
 {
+
     /**
      * @inheritdoc
      */
@@ -32,19 +38,19 @@ class SecurityController extends Controller
         unset($behaviours['authenticator']);
 
         return ArrayHelper::merge($behaviours, [
-            'authenticator' => [
-                'class' => CompositeAuth::className(),
-                'optional' => [
-                    'login',
-                    'verify-auth'
+                'authenticator' => [
+                    'class' => CompositeAuth::className(),
+                    'optional' => [
+                        'login',
+                        'verify-auth',
+                        'forgot-password'
+                    ],
+                    'authMethods' => [
+                        'bearerAuth' => [
+                            'class' => HttpBearerAuth::className(),
+                        ]
+                    ],
                 ],
-                'authMethods' => [
-                    'bearerAuth' => [
-                        'class' => HttpBearerAuth::className(),
-                    ]
-                ],
-
-            ],
         ]);
     }
 
@@ -56,7 +62,8 @@ class SecurityController extends Controller
         return [
             'login' => ['post'],
             'logout' => ['post'],
-            'verify-auth' => ['post']
+            'verify-auth' => ['post'],
+            'forgot-password' => ['post']
         ];
     }
 
@@ -69,12 +76,80 @@ class SecurityController extends Controller
             ],
             'logout' => [
                 'class' => ActionLogout::className(),
-                'modelClass' => \lispa\amos\mobile\bridge\modules\v1\models\AccessTokens::className(),
+                'modelClass' => AccessTokens::className(),
             ],
             'verify-auth' => [
                 'class' => ActionVerifyAuth::className(),
-                'modelClass' => \lispa\amos\mobile\bridge\modules\v1\models\AccessTokens::className(),
+                'modelClass' => AccessTokens::className(),
             ],
         ];
+    }
+
+    /**
+     * 
+     * @return type
+     */
+    public function actionForgotPassword()
+    {
+        $ret = [];
+        try {
+            //Request params
+            $bodyParams = Yii::$app->getRequest()->getBodyParams();
+
+            $model = new ForgotPasswordForm();
+            $model->email = $bodyParams['email'];
+            if ($model->validate()) {
+                if ($model->email != NULL) {
+                    $dati_utente = $model->verifyEmail($model->email);
+                    if ($dati_utente) {
+
+                        $ret = $this->spedisciCredenziali($dati_utente->userProfile->id);
+                    }
+                }
+            }
+        } catch (Exception $ex) {
+            Yii::getLogger()->log($ex->getMessage(), Logger::LEVEL_ERROR);
+        }
+        return $ret;
+    }
+
+    /**
+     * 
+     * @param type $id
+     * @param type $isForgotPasswordView
+     * @param type $isForgotPasswordRequest
+     * @param type $urlCurrent
+     * @return type
+     */
+    public function spedisciCredenziali($id)
+    {
+        $ret = [];
+        try {
+            $model = UserProfile::findOne($id);
+            if ($model && $model->user && $model->user->email) {
+                $model->user->generatePasswordResetToken();
+                $model->user->save(false);
+                $sent = UserProfileUtility::sendCredentialsMail($model);
+
+                if ($sent) {
+
+                    $ret = [
+                        msg => AmosAdmin::t('amosadmin', 'Credenziali spedite correttamente alla email {email}',
+                            ['email' => $model->user->email])];
+                } else {
+
+                    $ret = [
+                        msg =>
+                        AmosAdmin::t('amosadmin', 'Si è verificato un errore durante la spedizione delle credenziali')];
+                }
+            } else {
+
+                $ret = [
+                    msg => AmosAdmin::t('amosadmin', 'Si è verificato un errore durante la spedizione delle credenziali')];
+            }
+        } catch (Exception $ex) {
+            Yii::getLogger()->log($ex->getMessage(), Logger::LEVEL_ERROR);
+        }
+        return $ret;
     }
 }

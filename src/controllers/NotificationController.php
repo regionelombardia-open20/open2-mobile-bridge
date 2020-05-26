@@ -1,25 +1,25 @@
 <?php
 
 /**
- * Lombardia Informatica S.p.A.
+ * Aria S.p.A.
  * OPEN 2.0
  *
  *
- * @package    lispa\amos\mobile\bridge
+ * @package    open20\amos\mobile\bridge
  * @category   CategoryName
  */
 
-namespace lispa\amos\mobile\bridge\controllers;
+namespace open20\amos\mobile\bridge\controllers;
 
-use lispa\amos\admin\models\UserProfile;
-use lispa\amos\chat\models\Message;
-use lispa\amos\comments\models\Comment;
-use lispa\amos\comments\models\CommentReply;
-use lispa\amos\discussioni\models\DiscussioniTopic;
-use lispa\amos\mobile\bridge\modules\v1\models\AccessTokens;
-use lispa\amos\mobile\bridge\modules\v1\models\ChatMessages;
-use lispa\amos\mobile\bridge\modules\v1\models\User;
-use lispa\amos\news\models\News;
+use open20\amos\admin\models\UserProfile;
+use open20\amos\chat\models\Message;
+use open20\amos\comments\models\Comment;
+use open20\amos\comments\models\CommentReply;
+use open20\amos\discussioni\models\DiscussioniTopic;
+use open20\amos\mobile\bridge\modules\v1\models\AccessTokens;
+use open20\amos\mobile\bridge\modules\v1\models\ChatMessages;
+use open20\amos\mobile\bridge\modules\v1\models\User;
+use open20\amos\news\models\News;
 use yii\db\ActiveQuery;
 use yii\db\ActiveRecord;
 use yii\rest\Controller;
@@ -116,20 +116,67 @@ class NotificationController extends Controller
         }
     }
 
+//    public function sendNotification($user_id, $title, $body, $content_type, $content_id)
+//    {
+//        $user = User::findOne(['id' => $user_id]);
+//
+//        if ($user && $user->id) {
+//            $note = $this->module->fcm->createNotification($title, $body);
+//
+//            $note->setIcon('notification_icon_resource_name')
+//                ->setColor('#ffffff')
+//                ->setBadge(1);
+//
+//            $message = $this->module->fcm->createMessage();
+//
+//
+//            /**
+//             * @var ActiveQuery $q
+//             */
+//            $q = AccessTokens::find();
+//            $q->groupBy(['fcm_token', 'device_os']);
+//            $q->andWhere(['user_id' => $user_id]);
+//
+//            //All tokens
+//            $tokens = $q->all();
+//
+//            //Se non ci sono tokens a cui mandare salto la procedura
+//            if(!$tokens || !count($tokens)) {
+//                return false;
+//            }
+//
+//            foreach ($tokens as $token) {
+//                if (!empty($token->fcm_token)) {
+//                    $message->addRecipient(new Device($token->fcm_token));
+//                }
+//            }
+//
+//            $message->setNotification($note);
+//            $message->setData([
+//                'targetId' => $content_id,
+//                'targetScreen' => $content_type
+//            ]);
+//
+//            $response = $this->module->fcm->send($message);
+//        }
+//    }
+    
+    /**
+     * 
+     * @param type $user_id
+     * @param type $title
+     * @param type $body
+     * @param type $content_type
+     * @param type $content_id
+     * @return boolean
+     */
     public function sendNotification($user_id, $title, $body, $content_type, $content_id)
     {
+        $ret = false;
         $user = User::findOne(['id' => $user_id]);
 
-        if ($user && $user->id) {
-            $note = $this->module->fcm->createNotification($title, $body);
-
-            $note->setIcon('notification_icon_resource_name')
-                ->setColor('#ffffff')
-                ->setBadge(1);
-
-            $message = $this->module->fcm->createMessage();
-
-
+        if ($user && $user->id) 
+        {
             /**
              * @var ActiveQuery $q
              */
@@ -144,21 +191,24 @@ class NotificationController extends Controller
             if(!$tokens || !count($tokens)) {
                 return false;
             }
-
-            foreach ($tokens as $token) {
-                if (!empty($token->fcm_token)) {
-                    $message->addRecipient(new Device($token->fcm_token));
-                }
-            }
-
-            $message->setNotification($note);
-            $message->setData([
+            $note = new open20\expo\Message($title, $body);
+            $note->setIcon('notification_icon_resource_name')
+               ->setColor('#ffffff')
+               ->setBadge(1);
+            $data = [
                 'targetId' => $content_id,
                 'targetScreen' => $content_type
-            ]);
-
-            $response = $this->module->fcm->send($message);
+            ];
+            $note->setData($data);
+            $notification = $note->buildMessage();
+            foreach ($tokens as $token) {
+                if (!empty($token->fcm_token)) {
+                    \Yii::$app->expo->notify($token->fcm_token, $notification);
+                }
+            }
+            $ret = true;
         }
+        return $ret;
     }
 
     /**

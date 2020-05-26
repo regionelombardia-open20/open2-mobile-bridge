@@ -11,25 +11,23 @@
 
 namespace open20\amos\mobile\bridge\modules\v1\actions\comments;
 
-use open20\amos\admin\models\UserProfile;
-use open20\amos\comments\models\Comment;
 use open20\amos\comments\models\CommentInterface;
-use open20\amos\community\models\Community;
-use open20\amos\core\record\Record;
-use open20\amos\mobile\bridge\modules\v1\models\AccessTokens;
-use open20\amos\mobile\bridge\modules\v1\models\User;
-use yii\base\Exception;
-use yii\helpers\Json;
+use open20\amos\comments\models\CommentReply;
+use Yii;
 use yii\rest\Action;
 
-class ActionItemPushComment extends Action
+class ActionItemPushCommentReply extends Action
 {
     public function run()
     {
         //Request params
-        $bodyParams = \Yii::$app->getRequest()->getBodyParams();
+        $bodyParams = Yii::$app->getRequest()->getBodyParams();
 
         if(empty($bodyParams['comment_text'])) {
+            return false;
+        }
+        
+        if(empty($bodyParams['comment_id'])) {
             return false;
         }
 
@@ -53,17 +51,16 @@ class ActionItemPushComment extends Action
         $canComment = 'COMMENTS_CONTRIBUTOR';
 
         //Commentable
-        if ($record instanceof CommentInterface && \Yii::$app->user->can($canComment)) {
+        if ($record instanceof CommentInterface && Yii::$app->user->can($canComment)) {
             //If the content is commentable
             if (!$record->isCommentable()) {
                 return ['commentable' => false];
             }
 
             //Store comment
-            $comment = new Comment();
-            $comment->comment_text = strip_tags($bodyParams['comment_text']);
-            $comment->context = $namespace;
-            $comment->context_id = $record->id;
+            $comment = new CommentReply();
+            $comment->comment_reply_text = strip_tags($bodyParams['comment_text']);
+            $comment->comment_id = $bodyParams['comment_id'];
             $comment->save(false);
 
             return [

@@ -1,22 +1,22 @@
 <?php
 
 /**
- * Lombardia Informatica S.p.A.
+ * Aria S.p.A.
  * OPEN 2.0
  *
  *
- * @package    lispa\amos\mobile\bridge
+ * @package    open20\amos\mobile\bridge
  * @category   CategoryName
  */
 
-namespace lispa\amos\mobile\bridge\modules\v1\controllers;
+namespace open20\amos\mobile\bridge\modules\v1\controllers;
 
-use lispa\amos\admin\AmosAdmin;
-use lispa\amos\admin\models\UserProfile;
-use lispa\amos\attachments\components\FileImport;
-use lispa\amos\core\user\User;
-use lispa\amos\socialauth\models\SocialAuthUsers;
-use lispa\amos\socialauth\Module;
+use open20\amos\admin\AmosAdmin;
+use open20\amos\admin\models\UserProfile;
+use open20\amos\attachments\components\FileImport;
+use open20\amos\core\user\User;
+use open20\amos\socialauth\models\SocialAuthUsers;
+use open20\amos\socialauth\Module;
 use Yii;
 use yii\base\Exception;
 use yii\filters\AccessControl;
@@ -27,7 +27,7 @@ use yii\helpers\ArrayHelper;
 
 /**
  * Class FileController
- * @package lispa\amos\mibile\bridge\controllers
+ * @package open20\amos\mibile\bridge\controllers
  */
 class DefaultController extends Controller
 {

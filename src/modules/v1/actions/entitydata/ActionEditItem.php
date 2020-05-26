@@ -1,21 +1,21 @@
 <?php
 
 /**
- * Lombardia Informatica S.p.A.
+ * Aria S.p.A.
  * OPEN 2.0
  *
  *
- * @package    lispa\amos\mobile\bridge
+ * @package    open20\amos\mobile\bridge
  * @category   CategoryName
  */
 
-namespace lispa\amos\mobile\bridge\modules\v1\actions\entitydata;
+namespace open20\amos\mobile\bridge\modules\v1\actions\entitydata;
 
-use lispa\amos\admin\models\UserProfile;
-use lispa\amos\community\models\Community;
-use lispa\amos\core\record\Record;
-use lispa\amos\mobile\bridge\modules\v1\models\AccessTokens;
-use lispa\amos\mobile\bridge\modules\v1\models\User;
+use open20\amos\admin\models\UserProfile;
+use open20\amos\community\models\Community;
+use open20\amos\core\record\Record;
+use open20\amos\mobile\bridge\modules\v1\models\AccessTokens;
+use open20\amos\mobile\bridge\modules\v1\models\User;
 use yii\base\Exception;
 use yii\helpers\Json;
 use yii\rest\Action;

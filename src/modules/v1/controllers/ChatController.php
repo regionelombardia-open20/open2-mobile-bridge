@@ -1,21 +1,21 @@
 <?php
 
 /**
- * Lombardia Informatica S.p.A.
+ * Aria S.p.A.
  * OPEN 2.0
  *
  *
- * @package    lispa\amos\mobile\bridge
+ * @package    open20\amos\mobile\bridge
  * @category   CategoryName
  */
 
-namespace lispa\amos\mobile\bridge\modules\v1\controllers;
+namespace open20\amos\mobile\bridge\modules\v1\controllers;
 
 
-use lispa\amos\admin\models\UserProfile;
-use lispa\amos\chat\models\Conversation;
-use lispa\amos\mobile\bridge\modules\v1\models\ChatMessages;
-use lispa\amos\mobile\bridge\modules\v1\models\User;
+use open20\amos\admin\models\UserProfile;
+use open20\amos\chat\models\Conversation;
+use open20\amos\mobile\bridge\modules\v1\models\ChatMessages;
+use open20\amos\mobile\bridge\modules\v1\models\User;
 use yii\db\ActiveQuery;
 use yii\filters\auth\CompositeAuth;
 use yii\filters\auth\HttpBearerAuth;
@@ -89,6 +89,10 @@ class ChatController extends Controller
         ];
     }*/
 
+    /**
+     * 
+     * @return type
+     */
     public function actionChatList()
     {
         $module = $this->module;
@@ -98,7 +102,7 @@ class ChatController extends Controller
          * @var $q ActiveQuery
          */
         $q = ChatMessages::find();
-        $q->alias('conversation');
+        //$q->alias('conversation');
         $q->select([
             'sender.id',
             'sender.nome',
@@ -106,12 +110,12 @@ class ChatController extends Controller
             'sender_id',
             'receiver_id',
             //'conversation.text',
-            'MAX(conversation.created_at) datetime'
+            '('. ChatMessages::tablename() .'.created_at) datetime'
         ]);
-        $q->innerJoin("user_profile as sender", "sender.user_id = IF(`conversation`.`receiver_id`={$userID},conversation.sender_id,conversation.receiver_id)");
-        $q->andWhere(['conversation.receiver_id' => $userID]);
-        $q->orWhere(['conversation.sender_id' => $userID]);
-        $q->groupBy(['sender.id']);
+        $q->innerJoin("user_profile as sender", "sender.user_id = IF(`".ChatMessages::tablename()."`.`receiver_id`={$userID},".ChatMessages::tablename().".sender_id,".ChatMessages::tablename().".receiver_id)");
+        $q->andWhere([ChatMessages::tablename().'.receiver_id' => $userID]);
+        $q->orWhere([ChatMessages::tablename().'.sender_id' => $userID]);
+        //$q->groupBy(['sender.id']);
         $q->orderBy(['datetime' => SORT_DESC]);
         $q->asArray();
 //pr($q->createCommand()->rawSql);die;
@@ -151,6 +155,11 @@ class ChatController extends Controller
         return $chats;
     }
 
+    /**
+     * 
+     * @param type $contact_id
+     * @return type
+     */
     public function actionChatDetail($contact_id)
     {
         $userID = \Yii::$app->user->id;
@@ -251,12 +260,12 @@ class ChatController extends Controller
         $owners = [];
 
         foreach ($users as $k=>$user) {
-            if(!isset($owners[$user['created_by']])) {
-                $owners[$user['created_by']] = UserProfile::findOne(['id' => $user['created_by']]);
+            if(!isset($owners[$user['id']])) {
+                $owners[$user['id']] = UserProfile::findOne(['user_id' => $user['id']]);
             }
 
             //Creator profile
-            $owner =  $owners[$user['created_by']];
+            $owner =  $owners[$user['id']];
 
             $user['avatarUrl'] = $owner->avatarWebUrl;
 
