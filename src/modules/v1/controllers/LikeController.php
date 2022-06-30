@@ -9,8 +9,8 @@ use yii\filters\auth\HttpBearerAuth;
 use yii\filters\VerbFilter;
 use yii\helpers\ArrayHelper;
 use yii\httpclient\Exception;
+use yii\log\Logger;
 use yii\rest\Controller;
-use yii\swiftmailer\Logger;
 
 class LikeController extends Controller
 {
@@ -68,11 +68,11 @@ class LikeController extends Controller
 
             //Refference namespace
             $classname = $bodyParams['namespace'];
-            $cid = $bodyParams['cid'];
+            $cid = $bodyParams['id'];
 
             if ($classname) {
                 $uid = \Yii::$app->getUser()->id;
-                $model_class_obj = ModelsClassname::find(['classname' => $classname])->one();
+                $model_class_obj = ModelsClassname::find()->andWhere(['classname' => $classname])->one();
                 if (!is_null($model_class_obj)) {
                     $rs = ContentLikes::find()
                         ->andWhere(
@@ -119,11 +119,11 @@ class LikeController extends Controller
 
             //Refference namespace
             $classname = $bodyParams['namespace'];
-            $cid = $bodyParams['cid'];
+            $cid = $bodyParams['id'];
 
             if ($classname) {
                 $uid = \Yii::$app->getUser()->id;
-                $model_class_obj = ModelsClassname::find(['classname' => $classname])->one();
+                $model_class_obj = ModelsClassname::find()->andWhere(['classname' => $classname])->one();
                 if (!is_null($model_class_obj)) {
                     $out = [
                         'tot' => $this->getCounter($cid, $model_class_obj->id),

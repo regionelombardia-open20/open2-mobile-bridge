@@ -39,9 +39,9 @@ class NewsParser extends BaseParser
 
         //Use search data provider
         $dataProvider = $newsSearch->searchOwnInterest([
-            'offset' => $offset,
-            'limit' => $limit > 20 ? 20 : $limit
-        ]);
+                                                           'offset' => $offset,
+                                                           'limit' => $limit > 20 ? 20 : $limit
+                                                       ]);
 
         //Fetch news and parse it
         $items = $dataProvider->getModels();
@@ -119,10 +119,10 @@ class NewsParser extends BaseParser
             //Fill fields from item usable in app
             $newItem['fields'] = [
                 'slug' => $item->slug,
-                'titolo' => $item->titolo,
-                'sottotitolo' => $item->sottotitolo,
-                'descrizione_breve' => html_entity_decode(strip_tags($item->descrizione_breve)),
-                'descrizione' => html_entity_decode(strip_tags($item->descrizione)),
+                'titolo' => self::flushHtml($item->titolo),
+                'sottotitolo' => self::flushHtml($item->sottotitolo),
+                'descrizione_breve' => self::flushHtml($item->descrizione_breve),
+                'descrizione' => self::flushHtml($item->descrizione),
                 'data_pubblicazione' => $item->data_pubblicazione,
                 'created_at' => $item->created_at,
                 'created_by' => $item->created_by,
@@ -156,7 +156,7 @@ class NewsParser extends BaseParser
     }
 
     /**
-     * 
+     *
      * @param type $model
      * @return boolean
      */
@@ -166,8 +166,8 @@ class NewsParser extends BaseParser
         if ($obj) {
             $classname = get_class($obj);
             $contentShared = ContentShared::find()
-                    ->innerJoinWith('modelsClassname')
-                    ->andWhere(['classname' => $classname, 'content_id' => $obj->id])->one();
+                ->innerJoinWith('modelsClassname')
+                ->andWhere(['classname' => $classname, 'content_id' => $obj->id])->one();
 
             if ($contentShared) {
                 return true;

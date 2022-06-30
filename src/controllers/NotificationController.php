@@ -191,10 +191,12 @@ class NotificationController extends Controller
             if(!$tokens || !count($tokens)) {
                 return false;
             }
-            $note = new open2\expo\Message($title, $body);
+            $note = new \open2\expo\Message($title, $body);
             $note->setIcon('notification_icon_resource_name')
                ->setColor('#ffffff')
-               ->setBadge(1);
+               ->setBadge(1)
+                //->setPriority('max');
+                ->setChannelId('openChannel');
             $data = [
                 'targetId' => $content_id,
                 'targetScreen' => $content_type
@@ -203,7 +205,7 @@ class NotificationController extends Controller
             $notification = $note->buildMessage();
             foreach ($tokens as $token) {
                 if (!empty($token->fcm_token)) {
-                    \Yii::$app->expo->notify($token->fcm_token, $notification);
+                    $this->module->expo->notify($token->fcm_token, $notification);
                 }
             }
             $ret = true;

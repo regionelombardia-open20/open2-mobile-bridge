@@ -10,7 +10,7 @@ class EventParser extends BaseParser
 {
 
     /**
-     * 
+     *
      * @param Event $item
      * @return array
      */
@@ -48,9 +48,9 @@ class EventParser extends BaseParser
             $newItem['fields'] = [
                 'begin_date_hour' => $item->begin_date_hour,
                 'end_date_hour' => $item->end_date_hour,
-                'title' => $item->title,
-                'description' => $item->description,
-                'summary' => html_entity_decode(strip_tags($item->summary)),
+                'title' => self::flushHtml($item->title),
+                'description' => self::flushHtml($item->description),
+                'summary' => self::flushHtml($item->summary),
                 'event_location' => $item->event_location,
                 'event_address' => $item->event_address,
                 'event_address_house_number' => $item->event_address_house_number,
@@ -61,6 +61,9 @@ class EventParser extends BaseParser
                 'created_at' => $item->created_at,
                 'created_by' => $item->created_by,
                 'comments_enabled' => true,
+                'seats_management' => $item->seats_management,
+                'has_tickets'  => $item->has_tickets,
+                'has_qr_code' => $item->has_qr_code,
                 'owner' => [
                     'nome' => $owner->nome,
                     'cognome' => $owner->cognome,

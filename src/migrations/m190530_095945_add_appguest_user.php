@@ -31,7 +31,7 @@ class m190530_095945_add_appguest_user extends Migration
             $userprofile->user_id = $user->id;
             $userprofile->nome = 'app';
             $userprofile->cognome = 'guest';
-            $userprofile->status = \Yii::$app->getWorkflowSource()->getWorkflow(UserProfile::USERPROFILE_WORKFLOW)->getInitialStatusId();
+            $userprofile->status = \Yii::$app->workflowSource->getWorkflow(UserProfile::USERPROFILE_WORKFLOW)->getInitialStatusId();
      
             $userprofile->save(false);
             $token = new AccessTokens();

@@ -12,12 +12,16 @@
 namespace open20\amos\mobile\bridge\modules\v1\controllers;
 
 
+use open20\amos\admin\models\UserProfile;
+use open20\amos\core\user\User;
 use yii\filters\auth\CompositeAuth;
+use yii\filters\auth\HttpBearerAuth;
 use yii\filters\ContentNegotiator;
 use yii\filters\Cors;
 use yii\filters\RateLimiter;
 use yii\filters\VerbFilter;
 use yii\rest\Controller;
+use yii\web\ForbiddenHttpException;
 use yii\web\Response;
 
 class UserController extends Controller
@@ -47,6 +51,12 @@ class UserController extends Controller
             ],
             'authenticator' => [
                 'class' => CompositeAuth::className(),
+                'authMethods' => [
+                    'bearerAuth' => [
+                        'class' => HttpBearerAuth::className(),
+                    ]
+                ],
+
             ],
             /*
             'rateLimiter' => [
@@ -68,13 +78,46 @@ class UserController extends Controller
 
     public function actionUpdate()
     {
+        $user = User::findOne(['id' => \Yii::$app->user->id]);
+        $profile = $user->userProfile;
+
+        if (!$user->load(\Yii::$app->request->post())) {
+            throw new ForbiddenHttpException($user->getErrorSummary()[0]);
+        }
+
+        if (!$user->validate()) {
+            throw new ForbiddenHttpException($user->getFirstError());
+        }
+
+        if (!$profile->load(\Yii::$app->request->post())) {
+            throw new ForbiddenHttpException($profile->getErrorSummary()[0]);
+        }
+
+        if (!$profile->validate()) {
+            throw new ForbiddenHttpException($profile->getErrorSummary()[0]);
+        }
+
+        $postProfile = \Yii::$app->request->post('UserProfile');
+        $postUser = \Yii::$app->request->post('User');
+
+        if(isset($postProfile['id']) || isset($postProfile['user_id']) || isset($postUser['id'])) {
+            throw new ForbiddenHttpException('Permesso Negato');
+        }
+
+        if (!$user->save(false)) {
+            throw new ForbiddenHttpException($profile->getErrorSummary()[0]);
+        }
+
+        if (!$profile->save(false)) {
+            throw new ForbiddenHttpException($profile->getErrorSummary()[0]);
+        }
+
         return true;
     }
 
     public function actionImage()
     {
         return true;
-
     }
 
 }

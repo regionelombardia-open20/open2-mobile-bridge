@@ -19,7 +19,7 @@ class BaseParser
         $obj = $model;
         if ($obj) {
             $uid = Yii::$app->getUser()->id;
-            $model_class_obj = ModelsClassname::find(['classname' => get_class($model)])->one();
+            $model_class_obj = ModelsClassname::find()->andWhere(['classname' => get_class($model)])->one();
             if (!is_null($model_class_obj)) {
                 $likeme = ContentLikes::getLikeMe($uid, $model->id, $model_class_obj->id);
             }
@@ -39,11 +39,20 @@ class BaseParser
         $obj = $model;
         if ($obj) {
             $uid = Yii::$app->getUser()->id;
-            $model_class_obj = ModelsClassname::find(['classname' => get_class($model)])->one();
+            $model_class_obj = ModelsClassname::find()->andWhere(['classname' => get_class($model)])->one();
             if (!is_null($model_class_obj)) {
                 $countLike = ContentLikes::getLikesToCounter(null, $model->id, $model_class_obj->id);
             }
         }
         return $countLike;
+    }
+
+    /**
+     * Remove html and transform special codes to text
+     * @param $text
+     * @return string
+     */
+    public static function flushHtml($text) {
+        return htmlspecialchars_decode(html_entity_decode(strip_tags($text)));
     }
 }

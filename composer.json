@@ -10,7 +10,7 @@
         "open20/amos-core":"*",
         "understeam/yii2-fcm": "~0.1",
         "2amigos/yii2-qrcode-helper": "1.0.2",
-        "open2/amos-expo": "*"
+        "open2/amos-expo": "^1.1.0"
     },
     "autoload": {
         "psr-4": {

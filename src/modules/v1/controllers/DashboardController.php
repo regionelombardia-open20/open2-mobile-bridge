@@ -198,7 +198,11 @@ class DashboardController extends Controller {
         try {
             $search = new EventSearch();
             $search->setNotifier(new NotifyWidgetDoNothing());
-            $listaEvents = $search->searchAll($_GET, 3)->getModels();
+            $dataProvider = $search->searchAll($_GET, 3);
+            $query = $dataProvider->query;
+            $query->andWhere(['>=', 'begin_date_hour', new \yii\db\Expression('NOW()') ]);
+            $query->addOrderBy(['begin_date_hour' => SORT_DESC]);
+            $listaEvents = $dataProvider->getModels();
             foreach ($listaEvents as $item) {
                 $newItem = EventParser::parseItem($item);
                 if (!empty($newItem)) {
