@@ -108,7 +108,8 @@ class ChatController extends Controller
             'sender.nome',
             'sender.cognome',
             'sender_id',
-            'receiver_id',
+           'receiver_id',
+           //'id message_id',
             //'conversation.text',
             '('. ChatMessages::tablename() .'.created_at) datetime'
         ]);
@@ -177,6 +178,10 @@ class ChatController extends Controller
             if(!isset($owners[$message['created_by']])) {
                 $owners[$message['created_by']] = UserProfile::findOne(['id' => $message['created_by']]);
             }
+
+            $messageObject = ChatMessages::findOne(['id' => $message['id']]);
+            $messageObject->is_new = false;
+            $messageObject->save();
 
             //Creator profile
             $owner =  $owners[$message['created_by']];
@@ -250,8 +255,12 @@ class ChatController extends Controller
         $q->innerJoin('user_profile as profile', "profile.user_id = IF(`contact`.`contact_id`={$userID},contact.user_id,contact.contact_id)");
         //$q->where(['!=','user.id', $userID]);
         $q->where('user.deleted_at IS NULL');
-        $q->andWhere(['contact.status' => 'ACCEPTED']);
-        $q->andWhere('contact.contact_id=:uid OR contact.user_id=:uid', [':uid' => $userID]);
+
+        if(\Yii::$app->params['skipContacts'] !== true) {
+            $q->andWhere(['contact.status' => 'ACCEPTED']);
+            $q->andWhere('contact.contact_id=:uid OR contact.user_id=:uid', [':uid' => $userID]);
+        }
+
         $q->orderBy('profile.nome ASC, profile.cognome ASC');
         //$users->limit(20);
         $q->asArray(true);

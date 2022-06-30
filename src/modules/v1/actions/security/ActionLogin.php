@@ -50,7 +50,7 @@ class ActionLogin extends Action
 
             if ($LoginForm->validate()) {
 
-                $User = User::findByUsername($LoginForm->username);
+                $User = User::findByUsernameOrEmail($LoginForm->username);
 
                 if ($User && $User->validatePassword($LoginForm->password)) {
 
@@ -71,6 +71,8 @@ class ActionLogin extends Action
                     $result['fcm_token'] = $token->fcm_token;
 
                     return $result;
+                } else {
+                    throw new Exception('Username or Password Missing');
                 }
             } else {
                 //throw new Exception('Unable to Load Data');

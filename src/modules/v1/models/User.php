@@ -7,12 +7,7 @@
  * @package    amos-mobile-bridge
  * @category   CategoryName
  */
-
 namespace open20\amos\mobile\bridge\modules\v1\models;
-
-use open20\amos\admin\models\UserProfile;
-use yii\db\ActiveRecord;
-use yii\web\IdentityInterface;
 
 class User extends \open20\amos\core\user\User
 {
@@ -23,6 +18,7 @@ class User extends \open20\amos\core\user\User
     {
         $fields = parent::fields();
         $fields[] = 'slimProfile';
+        $fields[] = 'socialIdm';
         $fields[] = 'userImage';
         $fields[] = 'accessToken';
         $fields[] = 'fcmToken';
@@ -39,9 +35,25 @@ class User extends \open20\amos\core\user\User
                 'nome',
                 'cognome',
                 'sesso',
-                'presentazione_breve'
+                'presentazione_breve',
+                'presentazione_personale'
             ]
         );
+    }
+
+    /**
+     * @return mixed
+     */
+    public function getSocialIdm()
+    {
+        return $this->socialIdmProfile ? $this->socialIdmProfile->toArray(
+            [
+                'numeroMatricola',
+                'codiceFiscale',
+                'accessMethod',
+                'accessLevel'
+            ]
+        ) : null;
     }
 
     /**
@@ -100,5 +112,15 @@ class User extends \open20\amos\core\user\User
             $token->save(false);
         }
         return $token;
+    }
+
+    public function getSocialIdmProfile() {
+        $socialModule = \Yii::$app->getModule('socialauth');
+
+        if($socialModule->id) {
+            return $this->hasOne(\open20\amos\socialauth\models\SocialIdmUser::className(), ['user_id' => 'id']);
+        }
+
+        return null;
     }
 }

@@ -84,7 +84,7 @@ class NotificationController extends Controller
         switch ($type) {
             case 'chat':
                 {
-                    $senderUser = UserProfile::findOne(['id' => $record->created_by]);
+                    $senderUser = UserProfile::findOne(['user_id' => $record->created_by]);
 
                     $this->sendNotification(
                         $record->receiver_id,
@@ -175,6 +175,8 @@ class NotificationController extends Controller
         $ret = false;
         $user = User::findOne(['id' => $user_id]);
 
+        \Yii::error("Notifica a {$user_id}");
+
         if ($user && $user->id) 
         {
             /**
@@ -196,16 +198,18 @@ class NotificationController extends Controller
                ->setColor('#ffffff')
                ->setBadge(1)
                 //->setPriority('max');
-                ->setChannelId('openChannel');
+                ->setChannelId('pushChannel');
             $data = [
                 'targetId' => $content_id,
                 'targetScreen' => $content_type
             ];
+            \Yii::error("Data notifica " . json_encode($data));
             $note->setData($data);
             $notification = $note->buildMessage();
             foreach ($tokens as $token) {
                 if (!empty($token->fcm_token)) {
-                    $this->module->expo->notify($token->fcm_token, $notification);
+                    $result = $this->module->expo->notify($token->fcm_token, $notification);
+                    \Yii::error("Risultato notifica " . json_encode($result));
                 }
             }
             $ret = true;

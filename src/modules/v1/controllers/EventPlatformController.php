@@ -3,11 +3,13 @@
 namespace open20\amos\mobile\bridge\modules\v1\controllers;
 
 use open20\amos\discussioni\models\DiscussioniTopic;
+use open20\amos\events\AmosEvents;
 use open20\amos\events\models\Event;
 use open20\amos\events\models\EventInvitation;
 use open20\amos\events\models\search\EventSearch;
+use open20\amos\events\utility\EventsUtility;
 use open20\amos\mobile\bridge\modules\v1\actions\entitydata\parsers\DiscussioniParser;
-use open20\amos\mobile\bridge\modules\v1\actions\entitydata\parsers\EventParser;
+use open20\amos\mobile\bridge\modules\v1\actions\entitydata\parsers\EventPlatformParser;
 use open20\amos\mobile\bridge\modules\v1\actions\entitydata\parsers\NewsParser;
 use open20\amos\mobile\bridge\modules\v1\actions\entitydata\parsers\PartecipantsParser;
 use open20\amos\mobile\bridge\modules\v1\actions\entitydata\parsers\SondaggiParser;
@@ -16,6 +18,7 @@ use open20\amos\news\models\News;
 use open20\amos\sondaggi\models\search\SondaggiSearch;
 use Exception;
 use Yii;
+use yii\db\Expression;
 use yii\filters\auth\CompositeAuth;
 use yii\filters\auth\HttpBearerAuth;
 use yii\filters\VerbFilter;
@@ -24,7 +27,7 @@ use yii\helpers\Url;
 use yii\log\Logger;
 use yii\rest\Controller;
 
-class EventController extends Controller
+class EventPlatformController extends Controller
 {
 
     /**
@@ -63,16 +66,15 @@ class EventController extends Controller
 
     /**
      * 
-     * @param type $offset
-     * @param type $limit
-     * @param type $from_date
-     * @param type $to_date
      * @return type
      */
-    public function actionEventsList($offset = null, $limit = null, $from_date = null, $to_date = null, $orderBy = null)
+    public function actionEventsList($offset = null, $limit = null,
+                                     $from_date = null, $to_date = null)
     {
         $list = [];
         try {
+            $eventsModule = AmosEvents::instance();
+            $eventTypeModel = $eventsModule->model('EventType');
             $params = [];
             $search = new EventSearch();
             if (!is_null($offset)) {
@@ -84,18 +86,34 @@ class EventController extends Controller
             if (!is_null($from_date)) {
                 $search->begin_date_hour;
             }
-            if (!is_null($orderBy)) {
-                $oderBy = ($orderBy == 'ASC') ? SORT_ASC : SORT_DESC;
-            }
-            $cwh          = $this->loadCwh();
-            $cwh->resetCwhScopeInSession();
-            $dataProvider = $search->searchOwnInterest($params);
-            $query        = $dataProvider->query;
-            $query->andWhere(['>=', 'begin_date_hour', new \yii\db\Expression('NOW()')]);
-            $query->addOrderBy(['begin_date_hour' => $orderBy]);
+            //$cwh          = $this->loadCwh();
+            //$cwh->resetCwhScopeInSession();
+            $dataProvider = $search->searchMyInvitations($params);
+            $subquery        = $dataProvider->query;
+            $subquery->select(Event::tableName() .'.id');
+            $subquery->andWhere(['>=', 'end_date_hour', new Expression('NOW()')]);
+
+            $dataProvider2 = $search->searchMyRegistrations($params);
+            $subquery2        = $dataProvider2->query;
+            $subquery2->select(Event::tableName() .'.id');
+            $subquery2->andWhere(['>=', 'end_date_hour', new Expression('NOW()')]);
+
+            $query = Event::find();
+            $query->innerJoin($eventTypeModel::tableName(), $eventTypeModel::tableName() .'.id = '. Event::tableName() . '.event_type_id');
+            $query->andWhere(['or',
+                ['and', [$eventTypeModel::tableName() .'.event_type' => $eventTypeModel::TYPE_OPEN],
+                [$eventTypeModel::tableName() .'.limited_seats' => 0]],
+                ['or', [$eventTypeModel::tableName() .'.event_type' => $eventTypeModel::TYPE_INFORMATIVE],
+                   ['or', ['in', Event::tableName() .'.id', $subquery ], ['in', Event::tableName() .'.id', $subquery2 ]]]
+                ]);
+            
+            $query->andWhere(['>=', 'end_date_hour', new Expression('NOW()')]);
+            $query->addOrderBy(['begin_date_hour' => SORT_ASC]);
+            $query->limit($limit);
+            $dataProvider->query = $query;
             $listModel    = $dataProvider->getModels();
             foreach ($listModel as $model) {
-                $list[] = EventParser::parseItem($model);
+                $list[] = EventPlatformParser::parseItem($model);
             }
         } catch (Exception $ex) {
             Yii::getLogger()->log($ex->getMessage(), Logger::LEVEL_ERROR);
@@ -113,7 +131,7 @@ class EventController extends Controller
         $ditail = [];
 
         try {
-            $ditail = EventParser::parseItem(Event::findOne(['id' => $event_id]));
+            $ditail = EventPlatformParser::parseItem(Event::findOne(['id' => $event_id]));
         } catch (Exception $ex) {
             Yii::getLogger()->log($ex->getMessage(), Logger::LEVEL_ERROR);
         }
@@ -333,7 +351,7 @@ class EventController extends Controller
             /* $url = \Yii::$app->params['platform']['backendUrl'].'/img/dem_app_v2.jpg';
               return "<div><img style='max-width: 100%' src='".$url ."'> </div>"; */
 
-            $file_jpg = \open20\amos\events\utility\EventsUtility::createDownloadTicket($event_id);
+            $file_jpg = EventsUtility::createDownloadTicket($event_id);
             if (!empty($file_jpg)) {
                 return "<div><img style='max-width: 100%' src='".\Yii::$app->params['platform']['backendUrl'].'/'.$file_jpg."' /></div>";
             }
@@ -349,7 +367,7 @@ class EventController extends Controller
      */
     public function actionEventHasTicket($event_id)
     {
+
         return EventUtility::EventHasTicket($event_id);
     }
-    
 }

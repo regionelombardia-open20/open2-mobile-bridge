@@ -6,7 +6,7 @@ use open20\amos\events\models\Event;
 use Yii;
 use yii\helpers\StringHelper;
 
-class EventParser extends BaseParser
+class EventPlatformParser extends BaseParser
 {
 
     /**
@@ -26,9 +26,12 @@ class EventParser extends BaseParser
         $editPremission = strtoupper($baseClassName . '_UPDATE');
 
         //Can user view element
-        $canView = Yii::$app->user->can($readPremission, ['model' => $item]);
+        //$canView = Yii::$app->user->can($readPremission, ['model' => $item]);
 
-        if ($canView) {
+        //if ($canView) {
+
+            $eventLocation = $item->eventLocation;
+            $eventPlace    = $eventLocation->eventPlaces;
             //Define temp item
             $newItem = [];
 
@@ -48,16 +51,16 @@ class EventParser extends BaseParser
             $newItem['fields'] = [
                 'begin_date_hour' => $item->begin_date_hour,
                 'end_date_hour' => $item->end_date_hour,
-                'title' => BaseParser::flushHtml($item->title),
-                'description' => BaseParser::flushHtml($item->description),
-                'summary' => BaseParser::flushHtml($item->summary),
-                'event_location' => $item->event_location,
-                'event_address' => $item->event_address,
-                'event_address_house_number' => $item->event_address_house_number,
-                'event_address_cap' => $item->event_address_cap,
-                'city' => $item->cityLocation->nome,
-                'province' => $item->provinceLocation->nome,
-                'country' => $item->countryLocation->nome,
+                'title' => self::flushHtml($item->title),
+                'description' => self::flushHtml($item->description),
+                'summary' => self::flushHtml($item->summary),
+                'event_location' => $eventLocation->name,
+                'event_address' => $eventPlace->address,
+                'event_address_house_number' => $eventPlace->street_number,
+                'event_address_cap' => $eventPlace->postal_code,
+                'city' => $eventPlace->city,
+                'province' => $eventPlace->province,
+                'country' => $eventPlace->country,
                 'created_at' => $item->created_at,
                 'created_by' => $item->created_by,
                 'comments_enabled' => true,
@@ -82,8 +85,8 @@ class EventParser extends BaseParser
             $newItem['canEdit'] = Yii::$app->user->can($editPremission, ['model' => $item]);
 
             return $newItem;
-        }
+        //}
 
-        return [];
+        //return [];
     }
 }

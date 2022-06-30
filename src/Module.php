@@ -7,11 +7,11 @@
  * @package    open20\amos\mobile\bridge
  * @category   CategoryName
  */
+
 namespace open20\amos\mobile\bridge;
 
 use open20\amos\core\module\AmosModule;
 use open20\amos\mobile\bridge\controllers\NotificationController;
-use open20\amos\mobile\bridge\modules\v1\V1;
 use Yii;
 use yii\base\BootstrapInterface;
 use yii\base\Event;
@@ -26,7 +26,6 @@ use yii\web\Application;
  */
 class Module extends AmosModule implements BootstrapInterface
 {
-
     public static $CONFIG_FOLDER = 'config';
 
     /**
@@ -45,7 +44,16 @@ class Module extends AmosModule implements BootstrapInterface
      * @inheritdoc
      */
     public $controllerNamespace = 'open20\amos\mobile\bridge\controllers';
-    public $timeout = 180;
+    public $timeout             = 180;
+
+    public function __construct($id, $parent = null, $config = array())
+    {
+        $local_config = ArrayHelper::merge(
+                require(__DIR__.DIRECTORY_SEPARATOR.'config'.DIRECTORY_SEPARATOR.'config.php'),
+                $config
+        );
+        parent::__construct($id, $parent, $local_config);
+    }
 
     /**
      * @throws Exception
@@ -55,8 +63,8 @@ class Module extends AmosModule implements BootstrapInterface
         parent::init();
 
         //Configuration
-        $config = require(__DIR__ . DIRECTORY_SEPARATOR . 'config' . DIRECTORY_SEPARATOR . 'config.php');
-        Yii::configure($this, ArrayHelper::merge($config, $this));
+        //$config = require(__DIR__ . DIRECTORY_SEPARATOR . 'config' . DIRECTORY_SEPARATOR . 'config.php');
+        //Yii::configure($this, ArrayHelper::merge($config, $this));
 
         if (!is_null(Yii::$app->request)) {
             if (strpos(Yii::$app->request->url, self::getModuleName())) {
@@ -72,10 +80,17 @@ class Module extends AmosModule implements BootstrapInterface
 
     public function bootstrap($app)
     {
+        if(Yii::$app->request->headers->has('authorization')) {
+            //Set mobile mode
+            \Yii::$app->session->set('isMobile', true);
+        }
+
         if ($app instanceof Application) {
             $notificationController = new NotificationController('notifications', $this);
 
-            Event::on(ActiveRecord::className(), ActiveRecord::EVENT_AFTER_INSERT, [$notificationController, 'afterActiveRecordCreate']);
+            Event::on(ActiveRecord::className(), ActiveRecord::EVENT_AFTER_INSERT, [
+                $notificationController, 'afterActiveRecordCreate'
+            ]);
         }
     }
 

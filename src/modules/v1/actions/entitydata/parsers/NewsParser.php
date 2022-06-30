@@ -7,6 +7,7 @@
  * @package    open20\amos\mobile\bridge
  * @category   CategoryName
  */
+
 namespace open20\amos\mobile\bridge\modules\v1\actions\entitydata\parsers;
 
 use open20\amos\admin\models\UserProfile;
@@ -29,19 +30,20 @@ class NewsParser extends BaseParser
     public static function getItems($namespace, $bodyParams)
     {
         //Paginated offset
-        $offset = $bodyParams['offset'] * 20;
+        $offset = $bodyParams['offset'] - 1;
 
         //Check limit is set
-        $limit = (int) $bodyParams['limit'] ?: 20;
+        $limit = (int)$bodyParams['limit'] ?: 20;
 
         //Instance search model
         $newsSearch = new NewsSearch();
 
         //Use search data provider
-        $dataProvider = $newsSearch->searchOwnInterest([
-                                                           'offset' => $offset,
-                                                           'limit' => $limit > 20 ? 20 : $limit
-                                                       ]);
+        $dataProvider = $newsSearch->searchOwnInterest([]);
+
+        //Set Limit and offsets
+        $dataProvider->pagination->setPageSize($limit);
+        $dataProvider->pagination->setPage($offset);
 
         //Fetch news and parse it
         $items = $dataProvider->getModels();
@@ -87,7 +89,6 @@ class NewsParser extends BaseParser
      */
     public static function parseItem($item)
     {
-
         //The base class name
         $baseClassName = StringHelper::basename(News2::className());
 

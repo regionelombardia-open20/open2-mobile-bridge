@@ -21,6 +21,10 @@ use open20\amos\mobile\bridge\modules\v1\actions\entitydata\parsers\NewsParser;
 use open20\amos\mobile\bridge\modules\v1\models\AccessTokens;
 use open20\amos\mobile\bridge\modules\v1\models\User;
 use open20\amos\news\models\News;
+use open20\amos\notificationmanager\AmosNotify;
+use open20\amos\notificationmanager\models\Notification;
+use open20\amos\notificationmanager\models\NotificationChannels;
+use open20\amos\notificationmanager\models\NotificationsRead;
 use yii\base\Exception;
 use yii\data\ActiveDataProvider;
 use yii\db\ActiveQuery;
@@ -32,6 +36,11 @@ class ActionListItems extends Action
 
     public function run()
     {
+        /**
+         * @var $amosNotify AmosNotify
+         */
+        $amosNotify = AmosNotify::getInstance();
+
         //Request params
         $bodyParams = \Yii::$app->getRequest()->getBodyParams();
 
@@ -53,9 +62,36 @@ class ActionListItems extends Action
                 }
                 break;
             default:
-                {
-                    $itemsArray = ItemsParser::getItems($namespace, $bodyParams);
+            {
+                $itemsArray = ItemsParser::getItems($namespace, $bodyParams);
+            }
+        }
+
+        if ($amosNotify && $amosNotify->id) {
+            foreach ($itemsArray as $item) {
+                $notification = Notification::findOne(
+                    [
+                        'content_id' => $item['id'],
+                        'class_name' => $namespace,
+                        'channels' => NotificationChannels::CHANNEL_READ
+                    ]
+                );
+
+                if($notification && $notification->id) {
+                    $notificationRead = NotificationsRead::findOne(
+                        [
+                            'user_id' => \Yii::$app->user->id,
+                            'notification_id' => $notification->id
+                        ]
+                    );
+
+                    $notificationRead ?: $notificationRead = new NotificationsRead();
+
+                    $notificationRead->notification_id = $notification->id;
+                    $notificationRead->user_id = \Yii::$app->user->id;
+                    $notificationRead->save(false);
                 }
+            }
         }
 
         return $itemsArray;

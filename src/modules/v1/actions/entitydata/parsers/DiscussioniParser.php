@@ -29,7 +29,7 @@ class DiscussioniParser extends BaseParser
     public static function getItems($namespace, $bodyParams)
     {
         //Paginated offset
-        $offset = $bodyParams['offset'] * 20;
+1        $offset = $bodyParams['offset'] - 1;
 
         //Check limit is set
         $limit = (int)$bodyParams['limit'] ?: 20;
@@ -38,10 +38,11 @@ class DiscussioniParser extends BaseParser
         $discussioniTopicSearch = new DiscussioniTopicSearch();
 
         //Use search data provider
-        $dataProvider = $discussioniTopicSearch->searchOwnInterest([
-            'offset' => $offset,
-            'limit' => $limit > 20 ? 20 : $limit
-        ]);
+        $dataProvider = $discussioniTopicSearch->searchOwnInterest([]);
+
+        //Set Limit and offsets
+        $dataProvider->pagination->setPageSize($limit);
+        $dataProvider->pagination->setPage($offset);
 
         //Fetch news and parse it
         $items = $dataProvider->getModels();

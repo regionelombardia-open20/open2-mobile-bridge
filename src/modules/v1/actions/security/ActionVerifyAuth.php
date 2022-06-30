@@ -47,6 +47,7 @@ class ActionVerifyAuth extends Action
                         'fcmToken',
                         'slimProfile',
                         'userImage',
+                        'socialIdm',
                     ]
                 ));
             }

@@ -58,6 +58,7 @@ class BulletCountController extends Controller
 
             //Refference namespace
             $classname = $bodyParams['namespace'];
+
             $count = $this->makeBulletCounter(
                 Yii::$app->getUser()->getId(),
                 $classname,
@@ -78,16 +79,17 @@ class BulletCountController extends Controller
      */
     private function makeBulletCounter($userId = null, $className = null, $externalQuery = null)
     {
-        if (isset(\Yii::$app->params['disableBulletCounters']) && (\Yii::$app->params['disableBulletCounters'] === true)) {
-            return 0;
-        }
-
         if (($userId == null) || ($className == null)) {
             return 0;
         }
 
+        if($className == Message::className()) {
+            return $externalQuery->count();
+        }
+
         $count = 0;
         $notifier = Yii::$app->getModule('notify');
+
         if ($notifier) {
             $count = $notifier->countNotRead(
                 $userId,
@@ -117,7 +119,6 @@ class BulletCountController extends Controller
                 $query = $modelSearch->buildQuery([], 'own-interest');
                 break;
             case Message::className():
-
                 $query = Message::find()
                     ->andWhere([
                     'is_new' => true,
