@@ -15,8 +15,11 @@ use backend\modules\campains\models\PreferenceCampainContainer;
 use backend\modules\campains\models\PreferenceCampainChannelMm;
 use DateTime;
 use open20\amos\admin\models\UserOtpCode;
+use open20\amos\audit\components\Helper;
 use open20\amos\core\utilities\CurrentUser;
 use preference\userprofile\exceptions\NotificationEmailException;
+use preference\userprofile\models\PreferenceLanguage;
+use preference\userprofile\models\PreferenceLanguageUserMm;
 use preference\userprofile\models\Tag;
 use open20\amos\admin\AmosAdmin;
 use open20\amos\admin\models\UserProfile;
@@ -35,6 +38,7 @@ use preference\userprofile\utility\TargetTagUtility;
 use preference\userprofile\utility\TopicTagUtility;
 use preference\userprofile\utility\UserInterestTagUtility;
 use Yii;
+use yii\db\ActiveQuery;
 use yii\db\Expression;
 use yii\filters\auth\CompositeAuth;
 use yii\filters\auth\HttpBearerAuth;
@@ -76,12 +80,14 @@ class PreferenceController extends DefaultController
                             'get-channels' => ['get'],
                             'get-targets' => ['get'],
                             'get-topics' => ['get'],
+                            'get-language' => ['get'],
                             'get-cross-topics' => ['get'],
                             'get-tag-by-id' => ['get'],
                             'get-user-by-id' => ['get'],
                             'update-user-by-id' => ['get', 'post'],
                             'update-password-by-user-by-id' => ['get', 'post'],
                             'preference-tag-toggle' => ['get', 'post'],
+                            'update-language' => ['get', 'post'],
                             'get-province' => ['get'],
                             'get-municipality' => ['get'],
                             'get-comunications-by-user' => ['get'],
@@ -219,6 +225,101 @@ class PreferenceController extends DefaultController
      * @return Json
      * @throws Exception
      */
+    public function actionGetLanguage($userId = null)
+    {
+        \Yii::$app->response->format = \yii\web\Response::FORMAT_JSON;
+        $ret = ['code' => 0, 'message' => 'Response OK'];
+        try {
+
+            // recupero l'elenco delle lingue attive
+            $languagesList = PreferenceLanguage::find()->andWhere(['enable' => 1])->all();
+            // recuper l'elenco delle lingue settate sull'utente
+            $userLanguages = ArrayHelper::map(PreferenceLanguageUserMm::find()->andWhere(['user_id' => $userId])->all(),'preference_language_id', 'preference_language_id');
+
+            /** @var PreferenceLanguage $language */
+            foreach ($languagesList as $language) {
+                $ret['data'][$language->id]['code'] = $language->code;
+                $ret['data'][$language->id]['label'] = $language->name;
+                $ret['data'][$language->id]['selected'] = false;
+                if (in_array($language->id, $userLanguages)) {
+                    $ret['data'][$language->id]['selected'] = true;
+                }
+            }
+
+        } catch (Exception $ex) {
+            Yii::getLogger()->log($ex->getMessage(), Logger::LEVEL_ERROR);
+            $ret = ['code' => $ex->getCode(), 'message' => $ex->getMessage()];
+        }
+        return $ret;
+    }
+
+    /**
+     * @return null[]
+     */
+    public function actionUpdateLanguage()
+    {
+        \Yii::$app->response->format = \yii\web\Response::FORMAT_JSON;
+        $toret = [
+            'status' => null,
+            'messages' => null,
+            'data' => null,
+        ];
+        $transaction = Yii::$app->db->beginTransaction();
+
+        try {
+            $bodyParams = \Yii::$app->getRequest()->getBodyParams();
+            $userId = isset($bodyParams['user_id'])? $bodyParams['user_id']: null;
+            /** @var UserProfile $userProfile */
+            $userProfile = UserProfile::findOne(['user_id' => $userId]);
+            if (empty($userProfile)) {
+                throw new InvalidArgumentException('Lo user_id inviato non corrispone a nesuna anagrafica a sistema');
+            }
+            unset($bodyParams['user_id']);
+
+            // elimino tutte le preferenze per poterle inserire nuovamente
+            $toDel = PreferenceLanguageUserMm::findAll(['user_id' => $userId]);
+            foreach ($toDel as $el) {
+                $el->delete();
+            }
+
+            foreach ($bodyParams as $code => $value) {
+                $language = PreferenceLanguage::find()->andWhere(['code' => $code])->one();
+                if (!empty($language) && ($value == 'true')) {
+                    $userLanguageMm = new PreferenceLanguageUserMm();
+                    $userLanguageMm->user_id = $userId;
+                    $userLanguageMm->preference_language_id = $language->id;
+                    $userLanguageMm->save(false);
+                }
+            }
+
+            $toCheck = PreferenceLanguageUserMm::findAll(['user_id' => $userId]);
+            if (count($toCheck) > 0)  {
+                $transaction->commit();
+                $toret['status'] = 'ok';
+            } else {
+                $transaction->rollBack();
+                $toret['status'] = 'ko';
+            }
+
+            return $toret;
+
+        } catch (Exception $ex) {
+            $transaction->rollBack();
+
+            Yii::getLogger()->log($ex->getMessage(), Logger::LEVEL_ERROR);
+
+            $toret['status'] = 'error';
+            $toret['messages'][] = $ex->getMessage();
+            return $toret;
+        }
+
+        throw new InvalidArgumentException('I parametri passati hanno generato un errore inatteso...');
+    }
+
+    /**
+     * @return Json
+     * @throws Exception
+     */
     public function actionGetTopics($targetCode, $userId = null)
     {   
         \Yii::$app->response->format = \yii\web\Response::FORMAT_JSON;
@@ -344,8 +445,11 @@ class PreferenceController extends DefaultController
             throw new InvalidArgumentException('Utente obbligatorio');
         }
 
+        /** @var ActiveQuery $query */
         $query = CampainsQueryUtility::getQueryBaseForCampainsChannels();
         $query->andWhere(['user.id' => $userId]);
+        // CANALE APP sulla scelta utente
+        $query->andWhere(['canale.id' => PreferenceChannel::APP_ID]);
         $query->orderBy('preference_campain_channel_mm.date_app ASC');
 
         $targets = null;
@@ -826,7 +930,15 @@ class PreferenceController extends DefaultController
     }
 
     /**
-     * 
+     *
+     * Attenzione, questa funzione deve fare il toggle del tag in base al canale app
+     *
+     * se deve accendere il tag allora deve aggiungere il solo canale app
+     * se il tag è già acceso allora abbiamo due casi!
+     * 1) se attivo il solo canale app allo va spento
+     * 2) se sono attivi altri canali come sms o email allora va tolto solo i canale APP!
+     *
+     * Se deve accendere/spegnere il target... allora pochi controlli
      */
     public function actionPreferenceTagToggle()
     {
@@ -856,24 +968,29 @@ class PreferenceController extends DefaultController
 
         $preferenceSelected = UserInterestTagUtility::getRegisteredUserInterestTag($userProfile, $tag);
 
-        if (empty($preferenceSelected)) {
-            // la aggiungo
-            UserInterestTagUtility::saveRegisteredUserInterestTag($userProfile, 'simple-choice', $tag);
-            if (TopicTagUtility::tagIsTopic($tag)) {
-                // VarDumper::dump(!UserInterestTagUtility::isSetUserChannel($tag, $userProfile->user_id, PreferenceChannel::APP_ID), $depth = 10, $highlight = false);
-                // aggiungo la preferenza sul canale se non esiste...
-                if (!UserInterestTagUtility::isSetUserChannel($tag, $userProfile->user_id, PreferenceChannel::APP_ID)){
-                    UserInterestTagUtility::addSinglePreferenceTopicChannel($userProfile->user_id, $tag, PreferenceChannel::APP_ID);
-                } 
+        // gestione di un tag che è un TARGET
+        // Il toggle deve accenderlo e spegnerlo banalmente
+        if (!TopicTagUtility::tagIsTopic($tag)){
+            if (empty($preferenceSelected)) {
+                UserInterestTagUtility::saveRegisteredUserInterestTag($userProfile, 'simple-choice', $tag);
+            } else {
+                UserInterestTagUtility::removeRegisteredUserInterestTag($userProfile, $tag);
             }
         } else {
-            // la elimino
-            UserInterestTagUtility::removeRegisteredUserInterestTag($userProfile, $tag);
-            if (TopicTagUtility::tagIsTopic($tag)) {
-                // VarDumper::dump(UserInterestTagUtility::isSetUserChannel($tag, $userProfile->user_id, PreferenceChannel::APP_ID), $depth = 10, $highlight = false);
-                // elimino la preferenza sul canale - solo quello dell'app
-                if (UserInterestTagUtility::isSetUserChannel($tag, $userProfile->user_id, PreferenceChannel::APP_ID)){
-                    UserInterestTagUtility::deletePreferenceTopicChannel($userProfile->user_id, $tag, PreferenceChannel::APP_ID);
+            // altrimenti è un TOPIC
+
+            // VarDumper::dump(UserInterestTagUtility::isSetUserChannel($tag, $userProfile->user_id, PreferenceChannel::APP_ID), $depth = 10, $highlight = false);
+            // TOGGLE della preferenza sul canale dell'APP
+            if (UserInterestTagUtility::isSetUserChannel($tag, $userProfile->user_id, PreferenceChannel::APP_ID)){
+                UserInterestTagUtility::deletePreferenceTopicChannel($userProfile->user_id, $tag, PreferenceChannel::APP_ID);
+            } else {
+                UserInterestTagUtility::addSinglePreferenceTopicChannel($userProfile->user_id, $tag, PreferenceChannel::APP_ID);
+
+                // se accendo la preferenza e non è attivo il tag sull'utente allora attivo il tag all'utente
+                if (empty($preferenceSelected)) {
+                    // la aggiungo
+                    UserInterestTagUtility::saveRegisteredUserInterestTag($userProfile, 'simple-choice', $tag);
+
                 }
             }
         }
