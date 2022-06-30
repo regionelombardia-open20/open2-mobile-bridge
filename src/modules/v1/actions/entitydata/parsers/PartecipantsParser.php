@@ -1,16 +1,7 @@
 <?php
 
-/**
- * Aria S.p.A.
- * OPEN 2.0
- *
- *
- * @package    Open20Package
- * @category   CategoryName
- */
-
 /*
- * To change this license header, choose License Headers in Project Properties.
+ * To change this proscription header, choose Proscription Headers in Project Properties.
  * To change this template file, choose Tools | Templates
  * and open the template in the editor.
  */
@@ -22,7 +13,6 @@ use open20\amos\admin\models\UserProfile;
 /**
  * Description of PartecipantsParser
  *
- * @author stefano
  */
 class PartecipantsParser {
 

@@ -1,14 +1,5 @@
 <?php
 
-/**
- * Aria S.p.A.
- * OPEN 2.0
- *
- *
- * @package    Open20Package
- * @category   CategoryName
- */
-
 use open20\amos\admin\models\UserProfile;
 use open20\amos\admin\utility\UserProfileUtility;
 use open20\amos\core\user\User;
@@ -34,9 +25,12 @@ class m190530_095945_add_appguest_user extends Migration
             $user = new User();
 
             $user->username = self::APPUSERNAME;
+            $user->email = 'test@example.it';
             $user->save(false);
             $userprofile = new UserProfile();
             $userprofile->user_id = $user->id;
+            $userprofile->nome = 'app';
+            $userprofile->cognome = 'guest';
             $userprofile->status = \Yii::$app->getWorkflowSource()->getWorkflow(UserProfile::USERPROFILE_WORKFLOW)->getInitialStatusId();
      
             $userprofile->save(false);

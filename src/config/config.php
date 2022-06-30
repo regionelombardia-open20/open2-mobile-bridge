@@ -34,7 +34,7 @@ return [
             'apiKey' => $firebaseApiKey,
         ],
         'expo' => [
-            'class' => 'open20\expo\ExpoPush'
+            'class' => 'open2\expo\ExpoPush'
         ],
     ]
 ];

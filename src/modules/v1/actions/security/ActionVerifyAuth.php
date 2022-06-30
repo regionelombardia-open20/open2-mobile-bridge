@@ -14,6 +14,7 @@ namespace open20\amos\mobile\bridge\modules\v1\actions\security;
 use open20\amos\mobile\bridge\modules\v1\models\AccessTokens;
 use open20\amos\mobile\bridge\modules\v1\models\User;
 use yii\base\Exception;
+use yii\helpers\ArrayHelper;
 use yii\helpers\Json;
 use yii\rest\Action;
 
@@ -35,9 +36,19 @@ class ActionVerifyAuth extends Action
             $token = AccessTokens::findOne(['access_token' => $bodyParams['token']]);
 
             if($token && $token->access_token) {
-                return [
+                return ArrayHelper::merge([
                     'status' => true
-                ];
+                ], $token->user->toArray(
+                    [
+                        'id',
+                        'username',
+                        'email',
+                        'accessToken',
+                        'fcmToken',
+                        'slimProfile',
+                        'userImage',
+                    ]
+                ));
             }
         }
 

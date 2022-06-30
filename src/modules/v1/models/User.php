@@ -85,8 +85,12 @@ class User extends \open20\amos\core\user\User
      */
     public function refreshAccessToken($deviceToken, $deviceOs)
     {
-        $token = AccessTokens::find()->andWhere(['fcm_token' => $deviceToken])
-            ->andWhere([ 'device_os' => $deviceOs])->one();
+        $token = AccessTokens::find()
+            ->andWhere(['fcm_token' => $deviceToken])
+            ->andWhere(['device_os' => $deviceOs])
+            ->andWhere(['user_id' => $this->id])
+            ->one();
+
         if(is_null($token)){
             $token = new AccessTokens();
             $token->user_id = $this->id;

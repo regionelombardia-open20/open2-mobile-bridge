@@ -191,7 +191,7 @@ class NotificationController extends Controller
             if(!$tokens || !count($tokens)) {
                 return false;
             }
-            $note = new open20\expo\Message($title, $body);
+            $note = new open2\expo\Message($title, $body);
             $note->setIcon('notification_icon_resource_name')
                ->setColor('#ffffff')
                ->setBadge(1);

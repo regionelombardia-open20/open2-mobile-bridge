@@ -1,14 +1,5 @@
 <?php
 
-/**
- * Aria S.p.A.
- * OPEN 2.0
- *
- *
- * @package    Open20Package
- * @category   CategoryName
- */
-
 namespace open20\amos\mobile\bridge\modules\v1\actions\entitydata\parsers;
 
 use open20\amos\admin\models\UserProfile;
