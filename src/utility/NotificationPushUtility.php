@@ -18,6 +18,7 @@ use open20\amos\mobile\bridge\modules\v1\models\AccessTokens;
 use open20\amos\mobile\bridge\modules\v1\models\ChatMessages;
 use open20\amos\mobile\bridge\modules\v1\models\User;
 use open20\amos\news\models\News;
+use yii\base\Exception;
 use yii\db\ActiveQuery;
 use yii\db\ActiveRecord;
 use yii\helpers\Console;
@@ -40,11 +41,12 @@ class NotificationPushUtility
     {
         $ret = false;
         $user = User::findOne(['id' => $user_id]);
+        Console::stdout("Notifica a $user_id" . PHP_EOL);
+
 
         \Yii::error("Notifica a {$user_id}");
 
-        if ($user && $user->id)
-        {
+        if ($user && $user->id) {
             /**
              * @var ActiveQuery $q
              */
@@ -56,7 +58,7 @@ class NotificationPushUtility
             $tokens = $q->all();
 
             //Se non ci sono tokens a cui mandare salto la procedura
-            if(!$tokens || !count($tokens)) {
+            if (!$tokens || !count($tokens)) {
                 return false;
             }
             $note = new \open2\expo\Message($title, $body);
@@ -76,7 +78,17 @@ class NotificationPushUtility
             foreach ($tokens as $token) {
                 if (!empty($token->fcm_token)) {
                     $expopush = new \open2\expo\ExpoPush();
-                    $result = $expopush->notify($token->fcm_token, $notification);
+                    if ($token->fcm_token != 'webcms') {
+                        $result = $expopush->notify($token->fcm_token, $notification);
+                    }
+                    if ($result[0]['status'] == 'error') {
+                        if ($result[0]['details']['error'] == 'DeviceNotRegistered') {
+                            $token->delete();
+                        }
+                    }
+
+//                    Console::stdout('--- Device ' . json_encode($result) . PHP_EOL);
+
                     \Yii::error("Risultato notifica " . json_encode($result));
                 }
             }

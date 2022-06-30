@@ -92,26 +92,51 @@ class EventPlatformController extends DefaultController
             $subquery2->select(Event::tableName() .'.id');
             $subquery2->andWhere(['>=', 'end_date_hour', new Expression('NOW()')]);
 
+            $now = date('Y-m-d H:i:s');
             $query = Event::find();
-            $query->innerJoin($eventTypeModel::tableName(), $eventTypeModel::tableName() .'.id = '. Event::tableName() . '.event_type_id');
-            $query->andWhere(
-                ['or',
-                    [
-                        'and',
-                        [$eventTypeModel::tableName() .'.event_type' => $eventTypeModel::TYPE_OPEN],
-                        [$eventTypeModel::tableName() .'.limited_seats' => 0]
+            $query->innerJoinWith('eventType')
+                ->andWhere(['OR',
+                    ['!= ', 'event_type.event_type', $eventTypeModel::TYPE_UPON_INVITATION],
+                    ['AND',
+                        ['=', 'event_type.event_type', $eventTypeModel::TYPE_UPON_INVITATION],
+                        ['in', Event::tableName() .'.id', $subquery ],
                     ],
-                    [ $eventTypeModel::tableName() .'.patronage' => 1],
-                    ['or',
-                       [$eventTypeModel::tableName() .'.event_type' => $eventTypeModel::TYPE_INFORMATIVE],
-                       ['or',
-                           ['in', Event::tableName() .'.id', $subquery ], ['in', Event::tableName() .'.id', $subquery2 ]
-                       ]
-                    ]
-                ]);
-            
-            $query->andWhere(['>=', 'end_date_hour', new Expression('NOW()')]);
-            $query->addOrderBy(['begin_date_hour' => SORT_ASC]);
+                    ['AND',
+                        ['=', 'event_type.event_type', $eventTypeModel::TYPE_UPON_INVITATION],
+                        ['in', Event::tableName() .'.id', $subquery2 ],
+                    ],
+                ])
+                ->andWhere([Event::tableName() . '.status' => Event::EVENTS_WORKFLOW_STATUS_PUBLISHED,])
+                ->andWhere(['<=', 'publication_date_begin', $now])
+                ->andWhere(['or',
+                        ['>=', 'publication_date_end', $now],
+                        ['publication_date_end' => null]]
+                )
+                ->andWhere(['or',
+                        ['>=', 'end_date_hour', $now],
+                        ['end_date_hour' => null]]
+                )->andWhere(['event.event_id' => null]);
+
+
+//            $query->innerJoin($eventTypeModel::tableName(), $eventTypeModel::tableName() .'.id = '. Event::tableName() . '.event_type_id');
+//            $query->andWhere(
+//                ['or',
+//                    [
+//                        'and',
+//                        [$eventTypeModel::tableName() .'.event_type' => $eventTypeModel::TYPE_OPEN],
+//                        [$eventTypeModel::tableName() .'.limited_seats' => 0]
+//                    ],
+//                    [ $eventTypeModel::tableName() .'.patronage' => 1],
+//                    ['or',
+//                       [$eventTypeModel::tableName() .'.event_type' => $eventTypeModel::TYPE_INFORMATIVE],
+//                       ['or',
+//                           ['in', Event::tableName() .'.id', $subquery ], ['in', Event::tableName() .'.id', $subquery2 ]
+//                       ]
+//                    ]
+//                ]);
+//
+//            $query->andWhere(['>=', 'end_date_hour', new Expression('NOW()')]);
+//            $query->addOrderBy(['begin_date_hour' => SORT_ASC]);
 
             $query->limit($limit);
             $dataProvider->query = $query;

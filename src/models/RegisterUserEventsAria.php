@@ -16,6 +16,7 @@ use open20\amos\admin\models\UserProfile;
 use open20\amos\admin\utility\UserProfileUtility;
 use open20\amos\community\models\Community;
 use open20\amos\community\models\CommunityUserMm;
+use open20\amos\core\models\ModelsClassname;
 use open20\amos\core\record\RecordDynamicModel;
 use open20\amos\core\user\User;
 use open20\amos\core\validators\CFValidator;
@@ -25,6 +26,7 @@ use open20\amos\events\models\Event;
 use open20\amos\events\models\EventGroupReferentMm;
 use open20\amos\events\models\EventInvitation;
 use open20\amos\events\utility\EventsUtility;
+use open20\amos\mobile\bridge\Module;
 use open20\amos\socialauth\models\SocialAuthUsers;
 use open20\amos\socialauth\utility\SocialAuthUtility;
 use Exception;
@@ -36,6 +38,7 @@ use yii\base\InvalidConfigException;
 use yii\base\Model;
 use yii\helpers\ArrayHelper;
 use yii\helpers\Json;
+use yii\web\Response;
 
 
 class RegisterUserEventsAria extends Model
@@ -84,21 +87,49 @@ class RegisterUserEventsAria extends Model
     public function rules()
     {
         return [
-            [['name', 'surname', 'email', 'event_id'], 'required'],
+            [['name', 'surname', 'email', 'event_id'], 'required', 'message' => Module::t('amosmobilebridge', "Il campo non può essere vuoto")],
             [['preference_tags', 'company', 'name', 'surname', 'email', 'sex', 'fiscal_code', 'telefon', 'userSocial', 'datiRecuperatiDaSocial', 'associaNuovoAccountSocial'], 'safe'],
             [['age', 'country', 'city', 'privacy_2', 'privacy', 'user_id', 'event_id'], 'integer'],
-            [['email'], 'email'],
+            ['email', 'email', 'message' => "L'indirizzo email non è valido"],
             [['fiscal_code'], CFValidator::className()],
             [['privacy_2'], 'isRequiredPreferenceTags'],
-            [['privacy'], 'required', 'requiredValue' => 1, 'message' => Yii::t('app', 'It is mandatory to accept the informations about the privacy')],
+            [['privacy'], 'required', 'requiredValue' => 1, 'message' => Module::t('amosmobilebridge', 'It is mandatory to accept the informations about the privacy')],
         ];
     }
 
-    public function isRequiredPreferenceTags(){
-        if($this->privacy_2){
-            if(empty($_POST['preference_tags'])){
-                $this->addError('preference_tags', \Yii::t('app',"E' necessario selezionare almeno un tag"));
-                $this->addError('privacy_2', \Yii::t('app',"E' necessario selezionare almeno un tag"));
+    /**
+     * @param string $attribute
+     * @return mixed|string
+     */
+    public function getAttributeLabel($attribute)
+    {
+        $array = [
+            'email' => Module::t('amosmbilebridge', "Email"),
+            'name' => Module::t('amosmbilebridge', "Nome"),
+            'surname' => Module::t('amosmbilebridge', "Cognome"),
+            'company' => Module::t('amosmbilebridge', "Azienda"),
+            'sex' => Module::t('amosmbilebridge', "Sesso"),
+            'fiscal_code' => Module::t('amosmbilebridge', "Codice Fiscale"),
+            'telefon' => Module::t('amosmbilebridge', "Telefono"),
+            'age' => Module::t('amosmbilebridge', "Età"),
+            'country' => Module::t('amosmbilebridge', "Provincia"),
+            'city' => Module::t('amosmbilebridge', "Città"),
+            'privacy' => Module::t('amosmbilebridge', "Privacy"),
+            'privacy_2' => Module::t('amosmbilebridge', "Privacy 2"),
+            'preference_tags' => Module::t('amosmbilebridge', "Preference tags"),
+        ];
+        if (!empty($array[$attribute])) {
+            return $array[$attribute];
+        }
+        return '';
+    }
+
+    public function isRequiredPreferenceTags()
+    {
+        if ($this->privacy_2) {
+            if (empty($_POST['preference_tags'])) {
+                $this->addError('preference_tags', Module::t('amosmobilebridge', "E' necessario selezionare almeno un tag"));
+                $this->addError('privacy_2', Module::t('amosmobilebridge', "E' necessario selezionare almeno un tag"));
             }
         }
 
@@ -295,6 +326,7 @@ class RegisterUserEventsAria extends Model
                 $profile = $user->userProfile;
                 $this->registerToCommunity($community, $user, $isWaiting);
                 $this->setUserProfileMoreFields($profile);
+                $profile->privacy_2 = $this->privacy_2;
                 $profile->save(false);
             }
         }
@@ -346,6 +378,8 @@ class RegisterUserEventsAria extends Model
         if (empty($userprofile->telefono) && !empty($this->telefon)) {
             $userprofile->telefono = $this->telefon;
         }
+
+        $userprofile->nascita_nazioni_id = 1;
 
     }
 
@@ -765,11 +799,10 @@ class RegisterUserEventsAria extends Model
                 ['user.email' => $this->email],
                 ['user.username' => $this->email]
             ])
-        ->andWhere(['event_id' => $event->id])->count();
+            ->andWhere(['event_id' => $event->id])->count();
 
         return $isParticipant > 0;
     }
-
 
 
 }

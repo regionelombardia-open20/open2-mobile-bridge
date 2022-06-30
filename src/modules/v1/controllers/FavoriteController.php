@@ -1,16 +1,23 @@
 <?php
 namespace open20\amos\mobile\bridge\modules\v1\controllers;
 
+use open20\amos\admin\AmosAdmin;
 use open20\amos\favorites\AmosFavorites;
 use open20\amos\favorites\widgets\FavoriteWidget;
+use InvalidArgumentException;
 use Yii;
 use yii\filters\VerbFilter;
 use yii\helpers\ArrayHelper;
+use yii\helpers\VarDumper;
 use yii\httpclient\Exception;
 use yii\log\Logger;
 
 class FavoriteController extends DefaultController
 {
+
+    const FAVORITE_OFF = 0;
+    const FAVORITE_ON = 1;
+
     /**
      * @inheritdoc
      */
@@ -35,6 +42,11 @@ class FavoriteController extends DefaultController
     public function actionFavorite()
     {
         $notify = Yii::$app->getModule('notify');
+        $toret = [
+            'status' => null,
+            'messages' => null,
+            'data' => null,
+        ];
         
         try {
             //Request params
@@ -43,66 +55,103 @@ class FavoriteController extends DefaultController
             //Refference namespace
             $classname = $bodyParams['namespace'];
             $cid = $bodyParams['id'];
+            $userId = $bodyParams['user_id'];
             
-            if ($classname) {
-                $uid = \Yii::$app->getUser()->id;
-                $model_class_obj = ModelsClassname::find()->andWhere(['classname' => $classname])->one();
+            if ($classname) { 
+
+                if (isset($userId) && !empty($userId)) {
+                    $userModel = AmosAdmin::instance()->createModel('User');
+                    if (!empty($userModel::findOne(['id' => $userId]))){
+                        $uid = $userId;
+                    } else {
+                        throw new InvalidArgumentException('Parametro user_id non è associato a nessun utente!');
+                    }
+                } else {
+                    $uid = \Yii::$app->getUser()->id;
+                }
+
+                $query = $classname::find()->andWhere(['id' => $cid]);
+                $model_class_obj = $query->one(); 
+
                 if (!is_null($model_class_obj)) {
-                    $alreadyFavorite = $notify->isFavorite($model, $uid);
-                    
+                    $alreadyFavorite = $notify->isFavorite($model_class_obj, $uid);
+                    $ok = false;
                     if ($alreadyFavorite) {
                         $ok = $notify->favouriteOff($uid, $classname, $cid);
-
-                        return $this->returnValues($ok, self::FAVORITE_OFF);
                     } else {
                         $ok = $notify->favouriteOn($uid, $classname, $cid);
-
-                        return $this->returnValues($ok, self::FAVORITE_ON);
                     }
+
+                    if ($ok) {
+                        $toret['status'] = 'ok';
+                    } else {
+                        $toret['status'] = 'ko';
+                        $toret['messages'][] = 'Impossibile cambiare stato...';
+                    }
+                    $toret['data'] = $notify->isFavorite($model_class_obj, $uid);
+
+                    return $toret;
+                } else {
+                    throw new InvalidArgumentException('Non è stato possibile individuare la preferenza da memorizzare');
                 }
             }
         } catch (Exception $ex) {
             Yii::getLogger()->log($ex->getMessage(), Logger::LEVEL_ERROR);
+
+            $toret['status'] = 'ko';
+            $toret['messages'][] = $ex->getMessage();
+            return $toret;
         }
         
     }
-    
+
     /**
-     * Make the final return values array and then encode it in JSON
-     * @param bool $ok
-     * @param string $type
-     * @return string
+     * 
+     * @return type
      */
-    private function returnValues($ok, $type)
+    public function actionIsFavorite($namespace, $userId, $id)
     {
-        $retVal = [
-            'success' => 0,
-            'nowFavorite' => 0,
-            'nowNotFavorite' => 1,
-            'msg' => '',
-            'favoriteBtnTitle' => ''
+        $notify = Yii::$app->getModule('notify');
+        $toret = [
+            'status' => null,
+            'messages' => null,
+            'data' => null,
         ];
+        
+        try {
+            if ($namespace) { 
 
-        $retVal['success'] = $ok ? 1 : 0;
+                if (isset($userId) && !empty($userId)) {
+                    $userModel = AmosAdmin::instance()->createModel('User');
+                    if (!empty($userModel::findOne(['id' => $userId]))){
+                        $uid = $userId;
+                    } else {
+                        throw new InvalidArgumentException('Parametro user_id non è associato a nessun utente!');
+                    }
+                } else {
+                    $uid = \Yii::$app->getUser()->id;
+                }
 
-        if ($ok && ($type == self::FAVORITE_ON)) {
-            $retVal['nowFavorite'] = 1;
-            $retVal['nowNotFavorite'] = 0;
-            $retVal['favoriteBtnTitle'] = FavoriteWidget::favoriteBtnTitle(true);
-            $retVal['msg'] = $ok 
-                ? AmosFavorites::t('amosfavorites', '#successfully_added')
-                : AmosFavorites::t('amosfavorites', '#error_while_adding');
-        } elseif ($ok && ($type == self::FAVORITE_OFF)) {
-            $retVal['nowFavorite'] = 0;
-            $retVal['nowNotFavorite'] = 1;
-            $retVal['favoriteBtnTitle'] = FavoriteWidget::favoriteBtnTitle(false);
-            $retVal['msg'] = $ok 
-                ? AmosFavorites::t('amosfavorites', '#successfully_removed')
-                : AmosFavorites::t('amosfavorites', '#error_while_removing');
+                $query = $namespace::find()->andWhere(['id' => $id]);
+                $model_class_obj = $query->one(); 
+                if (!is_null($model_class_obj)) {
+                    $toret['status'] = 'ok';
+                    $toret['data'] = $notify->isFavorite($model_class_obj, $uid);
+                    return $toret;
+                } else {
+                    throw new InvalidArgumentException('Non è stato possibile individuare la preferenza');
+                }
+            }
+        } catch (Exception $ex) {
+            Yii::getLogger()->log($ex->getMessage(), Logger::LEVEL_ERROR);
+
+            $toret['status'] = 'ko';
+            $toret['messages'][] = $ex->getMessage();
+            return $toret;
         }
-
-        return $retVal;
+        
     }
+
 
 
 }

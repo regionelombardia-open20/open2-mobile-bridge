@@ -31,6 +31,7 @@ class EventPlatformParser extends BaseParser
         //if ($canView) {
 
             $eventLocation = $item->eventLocation;
+            $eventEntrance = $item->eventLocationEntrance;
             $eventPlace    = $eventLocation->eventPlaces;
             //Define temp item
             $newItem = [];
@@ -46,6 +47,13 @@ class EventPlatformParser extends BaseParser
 
             //Image
             $image = $item->eventLogo;
+            $imageUrl = $item->getMainImageEvent();
+            $url = $imageUrl;
+
+            if(strpos($imageUrl, 'https') === false){
+//                pr('dentro');
+                $url = Yii::$app->getUrlManager()->createAbsoluteUrl($imageUrl);
+            }
 
             //Fill fields from item usable in app
             $newItem['fields'] = [
@@ -55,6 +63,7 @@ class EventPlatformParser extends BaseParser
                 'description' => self::flushHtml($item->description),
                 'summary' => self::flushHtml($item->summary),
                 'event_location' => $eventLocation->name,
+                'event_entrance' => $eventEntrance->name,
                 'event_address' => $eventPlace->address,
                 'event_address_house_number' => $eventPlace->street_number,
                 'event_address_cap' => $eventPlace->postal_code,
@@ -74,7 +83,7 @@ class EventPlatformParser extends BaseParser
                     'presentazione_breve' => $owner->presentazione_breve,
                     'avatarUrl' => $owner->avatarWebUrl,
                 ],
-                'eventImageUrl' => $image ? Yii::$app->getUrlManager()->createAbsoluteUrl($image->getWebUrl()) : null,
+                'eventImageUrl' => $url? $url : null,
             ];
             $newItem['likeMe'] = self::isLikeMe($item);
             $newItem['countLikeMe'] = self::getCountLike($item);

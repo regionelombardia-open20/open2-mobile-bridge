@@ -42,7 +42,8 @@ class DocumentiParser extends BaseParser
         $documentiSearch = new DocumentiSearch();
 
         //Use search data provider
-        $dataProvider = $documentiSearch->searchOwnInterest([]);
+        $dataProvider = $documentiSearch->searchOwnInterest([],null, true);
+        $dataProvider->query->andWhere(['is_folder' => 0]);
 
         //Set Limit and offsets
         $dataProvider->pagination->setPageSize($limit);
@@ -117,6 +118,14 @@ class DocumentiParser extends BaseParser
 
             //Image
             $document = $item->documentMainFile;
+
+            //info file
+            $extension = '';
+            $size = '';
+            if($document){
+                $extension = $document->type;
+                $size = self::formatSizeFile($document->size);
+            }
             //Fill fields from item usable in app
             $newItem['fields'] = [
                 'titolo' => self::flushHtml($item->titolo),
@@ -136,6 +145,8 @@ class DocumentiParser extends BaseParser
                     'avatarUrl' => $owner->avatarWebUrl,
                 ],
                 'documentUrl' => $document ? Yii::$app->getUrlManager()->createAbsoluteUrl($document->getWebUrl()) : null,
+                'extension' => $extension,
+                'size' => $size,
             ];
 
             $url = '';
@@ -178,4 +189,19 @@ class DocumentiParser extends BaseParser
 
         return false;
     }
+
+    /**
+     * @param $bytes
+     * @param int $precision
+     * @return string
+     */
+    public static function formatSizeFile($bytes, $precision = 2) {
+        $size = $bytes;
+        $units = array( 'B', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB');
+        $power = $size > 0 ? floor(log($size, 1024)) : 0;
+        $formatted = number_format($size / pow(1024, $power), 2, '.', ',');
+
+        return round($formatted, $precision) . ' ' . $units[$power];
+    }
+
 }

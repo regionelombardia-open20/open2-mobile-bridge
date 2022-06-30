@@ -33,9 +33,17 @@ class ActionVerifyAuth extends Action
         $bodyParams = \Yii::$app->getRequest()->getBodyParams();
 
         if($bodyParams['token']) {
+            /**
+             * @var $token AccessTokens
+             */
             $token = AccessTokens::findOne(['access_token' => $bodyParams['token']]);
 
             if($token && $token->access_token) {
+                if(\Yii::$app->request->post('fcm_token')) {
+                    $token->fcm_token = \Yii::$app->request->post('fcm_token');
+                    $token->save(false);
+                }
+
                 return ArrayHelper::merge([
                     'status' => true
                 ], $token->user->toArray(

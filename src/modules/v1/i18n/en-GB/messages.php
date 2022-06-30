@@ -10,4 +10,6 @@
  */
 
 return [
+    "E' necessario selezionare almeno un tag" => "It is mandatory to select at least a tag",
+    "Il campo non può essere vuoto" => "The field cannot be blank"
 ];

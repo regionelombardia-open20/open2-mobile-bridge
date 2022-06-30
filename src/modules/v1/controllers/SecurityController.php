@@ -134,18 +134,18 @@ class SecurityController extends DefaultController
                 if ($sent) {
 
                     $ret = [
-                        msg => AmosAdmin::t('amosadmin', 'Credenziali spedite correttamente alla email {email}',
+                        'msg' => AmosAdmin::t('amosadmin', 'Credenziali spedite correttamente alla email {email}',
                             ['email' => $model->user->email])];
                 } else {
 
                     $ret = [
-                        msg =>
+                        'msg' =>
                         AmosAdmin::t('amosadmin', 'Si è verificato un errore durante la spedizione delle credenziali')];
                 }
             } else {
 
                 $ret = [
-                    msg => AmosAdmin::t('amosadmin', 'Si è verificato un errore durante la spedizione delle credenziali')];
+                    'msg' => AmosAdmin::t('amosadmin', 'Si è verificato un errore durante la spedizione delle credenziali')];
             }
         } catch (Exception $ex) {
             Yii::getLogger()->log($ex->getMessage(), Logger::LEVEL_ERROR);

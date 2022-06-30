@@ -15,7 +15,10 @@ use open20\amos\admin\models\UserProfile;
 use open20\amos\admin\models\UserProfileAgeGroup;
 use open20\amos\community\models\CommunityUserMm;
 use open20\amos\comuni\models\IstatComuni;
+use open20\amos\comuni\models\IstatNazioni;
 use open20\amos\comuni\models\IstatProvince;
+use open20\amos\core\models\ModelsClassname;
+use open20\amos\core\user\User;
 use open20\amos\events\models\EventInvitation;
 use open20\amos\events\models\EventLanding;
 use open20\amos\events\models\Event;
@@ -24,6 +27,8 @@ use open20\amos\events\models\EventLocation;
 use open20\amos\events\models\EventType;
 use open20\amos\events\utility\EventsUtility;
 use open20\amos\mobile\bridge\models\RegisterUserEventsAria;
+use open20\amos\mobile\bridge\Module;
+use open20\amos\notificationmanager\models\NotificationConf;
 use Exception;
 use Yii;
 use yii\filters\auth\CompositeAuth;
@@ -32,7 +37,7 @@ use yii\filters\VerbFilter;
 use yii\helpers\ArrayHelper;
 use yii\helpers\Json;
 use yii\log\Logger;
-use yii\web\Controller;
+use open20\amos\core\controllers\AmosController;
 use yii\web\Response;
 
 class EventsAriaController extends DefaultController
@@ -53,10 +58,17 @@ class EventsAriaController extends DefaultController
                         'event-categories' => ['get'],
                         'form-fields' => ['get'],
                         'cities-from-contry' => ['get'],
+                        'select-values' => ['get'],
+                        'countries' => ['get'],
+                        'preference-tags' => ['get'],
+                        'states' => ['get'],
                         'user-datas' => ['get'],
                         'register-user' => ['post'],
+                        'is-registered-to-event' => ['get'],
                         'unsubscribe' => ['get'],
-                        'update-user-profile' => ['post']
+                        'update-user-profile' => ['post'],
+                        'update-notification-conf' => ['post'],
+                        'notification-conf' => ['get']
                     ],
                 ],
             ]);
@@ -70,6 +82,7 @@ class EventsAriaController extends DefaultController
     public function beforeAction($action)
     {
         $this->enableCsrfValidation = false;
+        \Yii::$app->language = 'it-IT';
         return parent::beforeAction($action);
     }
 
@@ -429,6 +442,54 @@ class EventsAriaController extends DefaultController
     }
 
     /**
+     * @return mixed
+     * @throws \yii\base\InvalidConfigException
+     */
+    public function actionSelectValues(){
+        \Yii::$app->response->format = Response::FORMAT_JSON;
+
+        $preferencesTags = ArrayHelper::map(EventsUtility::getPreferenceCenterTags(), 'id', 'nome');        $valuesAges = [];
+        foreach (UserProfileAgeGroup::find()->all() as $age) {
+            $valuesAges [$age->id] = $age->age_group;
+        }
+        $valuesSex = ['Maschio' => 'Maschio', 'Femmina' => 'Femmina'];
+        $valuesProvince = [];
+        foreach (IstatProvince::find()->orderBy('nome ASC')->all() as $provincia) {
+            $valuesProvince[$provincia->id] = $provincia->nome;
+        }
+
+        $valuesNazioni = [];
+        $nazioni =  IstatNazioni::find()->all();
+        foreach ($nazioni as $nazione){
+            $valuesNazioni[$nazione->id] = $nazione->nome;
+        }
+
+        $data['isOk'] = true;
+        $data['data'] = [
+            'preference_tags' => $preferencesTags,
+            'sex' => $valuesSex,
+            'age' => $valuesAges,
+            'country' => $valuesProvince,
+            'nascita_nazioni_id' => $valuesNazioni
+        ];
+        return $data;
+
+    }
+
+    /**
+     * @return array
+     */
+    public function actionPreferenceTags()
+    {
+        \Yii::$app->response->format = Response::FORMAT_JSON;
+        $preferencesTags = ArrayHelper::map(EventsUtility::getPreferenceCenterTags(), 'id', 'nome');
+        return [
+            'isOk' => true,
+            'data' => $preferencesTags
+            ];
+    }
+
+    /**
      * @param $id
      * @return array
      * @throws \yii\base\InvalidConfigException
@@ -454,6 +515,40 @@ class EventsAriaController extends DefaultController
         $data['data'] = $valuesComuni;
         return $valuesComuni;
     }
+
+    /**
+     * @throws \yii\base\InvalidConfigException
+     */
+    public function actionCountries(){
+        \Yii::$app->response->format = Response::FORMAT_JSON;
+
+        $province=  IstatProvince::find()->all();
+       foreach ($province as $provincia){
+           $valuesProv[$provincia->id] = $provincia->nome;
+       }
+        $data['isOk'] = true;
+        $data['data'] = $valuesProv;
+        return $data;
+    }
+
+    /**
+     * @throws \yii\base\InvalidConfigException
+     */
+    public function actionStates(){
+        \Yii::$app->response->format = Response::FORMAT_JSON;
+
+        $nazioni =  IstatNazioni::find()->all();
+        foreach ($nazioni as $nazione){
+            $values[$nazione->id] = $nazione->nome;
+        }
+        $data['isOk'] = true;
+        $data['data'] = $values;
+        return $data;
+
+    }
+
+
+
 
     /**
      * @param $user_id
@@ -547,6 +642,7 @@ class EventsAriaController extends DefaultController
     public function actionRegisterUser()
     {
         \Yii::$app->response->format = Response::FORMAT_JSON;
+
         try {
             $result = [];
             $data = [
@@ -565,7 +661,7 @@ class EventsAriaController extends DefaultController
                 $isWaiting = $this->isSeatOverflow($event);
                 if ($register->isAlreadyPresent($event)) {
                     $result['isOk'] = false;
-                    $result['errors'] = ['email' => 'Already registered'];
+                    $result['errors'] = ['email' => Module::t('amosmobilebridge','Already registered')];
                     return $result;
                 }
 
@@ -579,11 +675,11 @@ class EventsAriaController extends DefaultController
                     }
                 } else {
                     $result['isOk'] = false;
-                    $result['errors'] = $register->getErrors();
+                    $result['errors'] = $this->formatErrorsStringValidation($register->getErrors());
                 }
             } else {
                 $result['isOk'] = false;
-                $result['errors'] = ['event_id' => 'event_id does not exist'];
+                $result['errors'] = 'event_id - '.Module::t('amosmobilebridge', "L'evento non eisiste");
             }
         } catch (Exception $ex) {
             $data['isOk'] = false;
@@ -653,21 +749,21 @@ class EventsAriaController extends DefaultController
 
         if ($event->eventType->event_type == EventType::TYPE_INFORMATIVE) {
             $status ['code'] = 5;
-            $status ['message'] = \Yii::t('app', "Disabilitato");
+            $status ['message'] = Module::t('amosmobilebridge', "Disabilitato");
         } else if (EventsUtility::isEventParticipant($event->id, \Yii::$app->user->id)) {
             $status ['code'] = 4;
-            $status ['message'] = \Yii::t('app', "Sei già registrato all'evento.");
+            $status ['message'] = Module::t('amosmobilebridge', "Sei già registrato all'evento");
         } else if (!$event->isSubscribtionsOpened()) {
             $status ['code'] = 2;
-            $status ['message'] = \Yii::t('app', "Registrazioni chiuse");
+            $status ['message'] = \Yii::t('amosmobilebridge', "Registrazioni chiuse");
         } else if ($event->eventType->limited_seats == true
             && ($currentPariticipants >= $event->seats_available)
             && !$event->manage_waiting_list) {
             $status ['code'] = 3;
-            $status ['message'] = \Yii::t('app', "Registrazioni chiuse, i posti sono esauriti");
+            $status ['message'] = Module::t('amosmobilebridge', "Registrazioni chiuse, i posti sono esauriti");
         } else {
             $status ['code'] = 1;
-            $status ['message'] = \Yii::t('app', "Registrazioni aperte");
+            $status ['message'] = Module::t('amosmobilebridge', "Registrazioni aperte");
         }
         return $status;
 
@@ -742,6 +838,8 @@ class EventsAriaController extends DefaultController
                 if ($profile->load($postParsed) && $user->load($postParsed)) {
                     $preferencesTags = $_POST['preference_tags'];
                     $profile->azienda = $postParsed['UserProfile']['azienda'];
+                    $profile->privacy_2 = $postParsed['UserProfile']['privacy_2'];
+
                     if ($profile->validate() && $profile->validate()) {
                         $user->save(false);
                         $profile->save(false);
@@ -750,13 +848,14 @@ class EventsAriaController extends DefaultController
                         $result['data']['UserProfile'] = $this->getUserProfileDataFromUserid($user_id);
                     } else {
                         $result['isOk'] = false;
-                        $result['errors']['UserProfile'] = $profile->getErrors();
-                        $result['errors']['User'] = $user->getErrors();
+                        $errors = $profile->getErrors();
+                        $errors = ArrayHelper::merge($errors, $user->getErrors());
+                        $result['errors'] = $this->formatErrorsStringValidation($errors, 2);
                     }
                 }
             } else {
                 $data['isOk'] = false;
-                $data['errors'] = ['message' => "Forbidden"];
+                $data['errors'] = ['message' => Module::t('amosmobilebridge',"Forbidden")];
             }
         } catch (Exception $ex) {
             $data['isOk'] = false;
@@ -801,6 +900,153 @@ class EventsAriaController extends DefaultController
             return $map[$profileAttr];
         }
         return $profileAttr;
+    }
+
+    /**
+     * @param $user_id
+     * @return array
+     */
+    public function getNotificationConfContent($user_id)
+    {
+        $data = [];
+        $user = User::findOne($user_id);
+
+        //defualt values
+        $data['notifications_enabled'] =1 ;
+        $data['open20\amos\news\models\News']['email'] = 1;
+        $data['open20\amos\news\models\News']['push'] = 1;
+        $data['open20\amos\discussioni\models\DiscussioniTopic']['email'] = 1;
+        $data['open20\amos\documenti\models\Documenti']['push'] = 1;
+        $data['open20\amos\documenti\models\Documenti']['email'] = 1;
+        $data['open20\amos\sondaggi\models\base\Sondagg']['push'] = 1;
+        $data['open20\amos\sondaggi\models\base\Sondagg']['email'] = 1;
+
+        if ($user) {
+            $notificationConf = NotificationConf::find()->andWhere(['user_id' => $user_id])->one();
+            if ($notificationConf) {
+                $confContents = $notificationConf->notificationConfContents;
+                foreach ($confContents as $conf) {
+                    $models_classname = $conf->modelsClassname;
+                    $data[$models_classname->module]['email'] = $conf->email;
+                    $data[$models_classname->module]['push'] = $conf->push_notification;
+                }
+                $data['notifications_enabled'] = $notificationConf->notifications_enabled;
+            }
+
+        }
+        return $data;
+    }
+
+    /**
+     * @param null $user_id
+     * @return array
+     */
+    public function actionNotificationConf($user_id = null)
+    {
+        \Yii::$app->response->format = Response::FORMAT_JSON;
+        $data = [];
+        if (is_null($user_id)) {
+            $user_id = \Yii::$app->user->id;
+        }
+        $data = $this->getNotificationConfContent($user_id);
+        if (!empty($data)) {
+            return [
+                'isOk' => true,
+                'data' => $data
+            ];
+        }
+
+
+        return [
+            'isOk' => false,
+        ];
+    }
+
+    /**
+     * @param null $user_id
+     */
+    public function actionUpdateNotificationConf($user_id = null)
+    {
+        \Yii::$app->response->format = Response::FORMAT_JSON;
+        $post = \Yii::$app->request->post();
+        $parsedConfigs = [];
+        foreach ($post as $content => $config) {
+            $modelsClassname = ModelsClassname::find()->andWhere(['module' => $content])->one();
+            if ($modelsClassname) {
+                $parsedConfigs[$modelsClassname->id]['email'] = $config['email'];
+                $parsedConfigs[$modelsClassname->id]['push'] = $config['push'];
+            }
+        }
+
+        if (is_null($user_id)) {
+            $user_id = \Yii::$app->user->id;
+        }
+        $user = User::findOne($user_id);
+        if ($user) {
+            $ok = \backend\modules\eventsadmin\controllers\UserProfileController::saveNotificationConf($user, $parsedConfigs, $post['notifications_enabled']);
+            if ($ok) {
+                return [
+                    'isOk' => true,
+                    'data' => $this->getNotificationConfContent($user_id)
+                ];
+            }
+        }
+
+
+        return [
+            'isOk' => false
+        ];
+    }
+
+    /**
+     * @param $event_id
+     * @param null $user_id
+     * @return bool
+     * @throws \yii\base\InvalidConfigException
+     */
+    public function actionIsRegisteredToEvent($event_id, $user_id = null){
+        \Yii::$app->response->format = Response::FORMAT_JSON;
+
+        $event = Event::findOne($event_id);
+        if(empty($user_id)){
+            $user_id = \Yii::$app->user->id;
+        }
+        $count = 0;
+        if($event){
+            $count = CommunityUserMm::find()
+                ->andWhere(['community_id' => $event->community_id])
+                ->andWhere(['user_id' => $user_id])
+                ->andWhere(['status' => CommunityUserMm::STATUS_ACTIVE])->count();
+
+        }
+        return $count > 0;
+
+
+    }
+
+    /**
+     * @param $errors
+     * @param int $type
+     * @return string
+     */
+    public function formatErrorsStringValidation($errors, $type = 1){
+        $model = new RegisterUserEventsAria();
+        $modelUserProfile = new UserProfile();
+        $stringerror = [];
+        foreach ($errors as $attribute => $errs){
+            $labelattribute = '';
+            if($type == 1){
+                $labelattribute = Module::t('amosmbilebridge',$model->getAttributeLabel($attribute)).' ';
+            }
+            else if($type == 2) {
+                $labelattribute = $modelUserProfile->getAttributeLabel($attribute). ' ';
+            }
+            $stringerror[] = $labelattribute . '- '. implode(';', $errs);
+        }
+        $implode = implode(" \n ",$stringerror);
+
+//        pr($errors);die;
+        return $implode;
     }
 
 }
