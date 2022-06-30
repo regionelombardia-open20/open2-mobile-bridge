@@ -14,32 +14,21 @@ use open20\amos\notificationmanager\base\NotifyWidgetDoNothing;
 use open20\amos\sondaggi\models\search\SondaggiSearch;
 use Exception;
 use Yii;
-use yii\filters\auth\CompositeAuth;
-use yii\filters\auth\HttpBearerAuth;
+use yii\base\Event;
 use yii\filters\VerbFilter;
 use yii\helpers\ArrayHelper;
 use yii\helpers\StringHelper;
 use yii\log\Logger;
-use yii\rest\Controller;
 
-class DashboardController extends Controller {
+class DashboardController extends DefaultController {
 
     /**
      * @inheritdoc
      */
     public function behaviors() {
         $behaviours = parent::behaviors();
-        unset($behaviours['authenticator']);
 
         return ArrayHelper::merge($behaviours, [
-                    'authenticator' => [
-                        'class' => CompositeAuth::className(),
-                        'authMethods' => [
-                            'bearerAuth' => [
-                                'class' => HttpBearerAuth::className(),
-                            ]
-                        ],
-                    ],
                     'verbFilter' => [
                         'class' => VerbFilter::className(),
                         'actions' => [

@@ -24,7 +24,7 @@ use yii\helpers\Url;
 use yii\log\Logger;
 use yii\rest\Controller;
 
-class EventController extends Controller
+class EventController extends DefaultController
 {
 
     /**
@@ -33,18 +33,9 @@ class EventController extends Controller
     public function behaviors()
     {
         $behaviours = parent::behaviors();
-        unset($behaviours['authenticator']);
 
         return ArrayHelper::merge($behaviours,
                 [
-                    'authenticator' => [
-                        'class' => CompositeAuth::className(),
-                        'authMethods' => [
-                            'bearerAuth' => [
-                                'class' => HttpBearerAuth::className(),
-                            ]
-                        ],
-                    ],
                     'verbFilter' => [
                         'class' => VerbFilter::className(),
                         'actions' => [
@@ -85,14 +76,27 @@ class EventController extends Controller
                 $search->begin_date_hour;
             }
             if (!is_null($orderBy)) {
-                $oderBy = ($orderBy == 'ASC') ? SORT_ASC : SORT_DESC;
+                $orderBy = ($orderBy == 'ASC') ? SORT_ASC : SORT_DESC;
             }
             $cwh          = $this->loadCwh();
             $cwh->resetCwhScopeInSession();
             $dataProvider = $search->searchOwnInterest($params);
             $query        = $dataProvider->query;
-            $query->andWhere(['>=', 'begin_date_hour', new \yii\db\Expression('NOW()')]);
+//            $query->andWhere(['>=', 'begin_date_hour', new \yii\db\Expression('NOW()')]);
+
+            $query->andWhere(['OR',
+                [
+                    'AND',
+                    "NOW() BETWEEN `begin_date_hour` AND `end_date_hour`",
+                ],
+                [
+                    'AND',
+                    ['>=', 'begin_date_hour', new \yii\db\Expression('NOW()')]
+                ]
+            ]);
+
             $query->addOrderBy(['begin_date_hour' => $orderBy]);
+            
             $listModel    = $dataProvider->getModels();
             foreach ($listModel as $model) {
                 $list[] = EventParser::parseItem($model);

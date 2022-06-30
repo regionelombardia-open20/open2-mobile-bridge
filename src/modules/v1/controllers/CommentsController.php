@@ -20,29 +20,8 @@ use yii\filters\auth\HttpBearerAuth;
 use yii\helpers\ArrayHelper;
 use yii\rest\Controller;
 
-class CommentsController extends Controller
+class CommentsController extends DefaultController
 {
-    /**
-     * @inheritdoc
-     */
-    public function behaviors()
-    {
-        $behaviours = parent::behaviors();
-        unset($behaviours['authenticator']);
-
-        return ArrayHelper::merge($behaviours, [
-            'authenticator' => [
-                'class' => CompositeAuth::className(),
-                'authMethods' => [
-                    'bearerAuth' => [
-                        'class' => HttpBearerAuth::className(),
-                    ]
-                ],
-
-            ],
-        ]);
-    }
-
     /**
      * @inheritdoc
      */

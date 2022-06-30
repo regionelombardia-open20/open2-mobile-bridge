@@ -9,10 +9,9 @@ use yii\filters\auth\HttpBearerAuth;
 use yii\filters\VerbFilter;
 use yii\helpers\ArrayHelper;
 use yii\httpclient\Exception;
-use yii\rest\Controller;
 use yii\swiftmailer\Logger;
 
-class ShareController extends Controller
+class ShareController extends DefaultController
 {
 
     /**
@@ -21,17 +20,8 @@ class ShareController extends Controller
     public function behaviors()
     {
         $behaviours = parent::behaviors();
-        unset($behaviours['authenticator']);
 
         return ArrayHelper::merge($behaviours, [
-                'authenticator' => [
-                    'class' => CompositeAuth::className(),
-                    'authMethods' => [
-                        'bearerAuth' => [
-                            'class' => HttpBearerAuth::className(),
-                        ]
-                    ],
-                ],
                 'verbFilter' => [
                     'class' => VerbFilter::className(),
                     'actions' => [

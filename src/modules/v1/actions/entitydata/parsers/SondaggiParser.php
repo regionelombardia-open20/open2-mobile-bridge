@@ -120,7 +120,7 @@ class SondaggiParser {
         //$newItem['representingColumn'] = $item->representingColumn();
 
         //Creator profile
-        $owner = UserProfile::findOne(['id' => $item->created_by]);
+        $owner = UserProfile::find()->andWhere(['user_id' => $item->created_by])->one();
 
         //Fill fields from item usable in app
         $newItem = [

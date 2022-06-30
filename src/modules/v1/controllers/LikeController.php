@@ -12,7 +12,7 @@ use yii\httpclient\Exception;
 use yii\log\Logger;
 use yii\rest\Controller;
 
-class LikeController extends Controller
+class LikeController extends DefaultController
 {
 
     /**
@@ -21,17 +21,8 @@ class LikeController extends Controller
     public function behaviors()
     {
         $behaviours = parent::behaviors();
-        unset($behaviours['authenticator']);
 
         return ArrayHelper::merge($behaviours, [
-                'authenticator' => [
-                    'class' => CompositeAuth::className(),
-                    'authMethods' => [
-                        'bearerAuth' => [
-                            'class' => HttpBearerAuth::className(),
-                        ]
-                    ],
-                ],
                 'verbFilter' => [
                     'class' => VerbFilter::className(),
                     'actions' => [

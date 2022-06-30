@@ -20,11 +20,12 @@ use yii\filters\ContentNegotiator;
 use yii\filters\Cors;
 use yii\filters\RateLimiter;
 use yii\filters\VerbFilter;
+use yii\helpers\ArrayHelper;
 use yii\rest\Controller;
 use yii\web\ForbiddenHttpException;
 use yii\web\Response;
 
-class UserController extends Controller
+class UserController extends DefaultController
 {
 
     /**
@@ -32,7 +33,9 @@ class UserController extends Controller
      */
     public function behaviors()
     {
-        return [
+        $behaviours = parent::behaviors();
+
+        return ArrayHelper::merge($behaviours, [
             'contentNegotiator' => [
                 'class' => ContentNegotiator::className(),
                 'formats' => [
@@ -49,21 +52,12 @@ class UserController extends Controller
                     'unfollow' => ['post'],
                 ],
             ],
-            'authenticator' => [
-                'class' => CompositeAuth::className(),
-                'authMethods' => [
-                    'bearerAuth' => [
-                        'class' => HttpBearerAuth::className(),
-                    ]
-                ],
-
-            ],
             /*
             'rateLimiter' => [
                 'class' => RateLimiter::className(),
             ],
             */
-        ];
+        ]);
     }
 
     public function actionFollow()

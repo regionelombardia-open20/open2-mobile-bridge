@@ -16,7 +16,7 @@ use yii\httpclient\Exception;
 use yii\rest\Controller;
 use yii\swiftmailer\Logger;
 
-class BulletCountController extends Controller
+class BulletCountController extends DefaultController
 {
 
     /**
@@ -25,17 +25,8 @@ class BulletCountController extends Controller
     public function behaviors()
     {
         $behaviours = parent::behaviors();
-        unset($behaviours['authenticator']);
 
         return ArrayHelper::merge($behaviours, [
-                'authenticator' => [
-                    'class' => CompositeAuth::className(),
-                    'authMethods' => [
-                        'bearerAuth' => [
-                            'class' => HttpBearerAuth::className(),
-                        ]
-                    ],
-                ],
                 'verbFilter' => [
                     'class' => VerbFilter::className(),
                     'actions' => [
@@ -67,7 +58,7 @@ class BulletCountController extends Controller
         } catch (Exception $ex) {
             Yii::getLogger()->log($ex->getMessage(), Logger::LEVEL_ERROR);
         }
-        return $count;
+        return $count <= 99 ? $count : "99";
     }
 
     /**

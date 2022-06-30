@@ -12,13 +12,16 @@ namespace open20\amos\mobile\bridge\modules\v1\actions\entitydata\parsers;
 
 use open20\amos\admin\models\UserProfile;
 use open20\amos\core\models\ContentShared;
+use open20\amos\documenti\models\Documenti;
+use open20\amos\documenti\models\search\DocumentiSearch;
 use open20\amos\news\models\base\News as News2;
 use open20\amos\news\models\News;
 use open20\amos\news\models\search\NewsSearch;
 use Yii;
+use yii\base\Exception;
 use yii\helpers\StringHelper;
 
-class NewsParser extends BaseParser
+class DocumentiParser extends BaseParser
 {
 
     /**
@@ -36,10 +39,10 @@ class NewsParser extends BaseParser
         $limit = (int)$bodyParams['limit'] ?: 20;
 
         //Instance search model
-        $newsSearch = new NewsSearch();
+        $documentiSearch = new DocumentiSearch();
 
         //Use search data provider
-        $dataProvider = $newsSearch->searchOwnInterest([]);
+        $dataProvider = $documentiSearch->searchOwnInterest([]);
 
         //Set Limit and offsets
         $dataProvider->pagination->setPageSize($limit);
@@ -53,7 +56,6 @@ class NewsParser extends BaseParser
 
         foreach ($items as $item) {
             $newItem = self::parseItem($item);
-
             if (!empty($newItem)) {
                 //Insert New Item
                 $itemsArray[] = $newItem;
@@ -74,7 +76,7 @@ class NewsParser extends BaseParser
         $identifier = $bodyParams['id'];
 
         //Fetch news and parse it
-        $item = News::findOne($identifier);
+        $item = Documenti::findOne($identifier);
 
         //Resulting array of items
         $itemsArray = [];
@@ -90,7 +92,7 @@ class NewsParser extends BaseParser
     public static function parseItem($item)
     {
         //The base class name
-        $baseClassName = StringHelper::basename(News2::className());
+        $baseClassName = StringHelper::basename(\open20\amos\documenti\models\base\Documenti::className());
 
         //Read permission name
         $readPremission = strtoupper($baseClassName . '_READ');
@@ -100,7 +102,6 @@ class NewsParser extends BaseParser
 
         //Can user view element
         $canView = Yii::$app->user->can($readPremission, ['model' => $item]);
-
         if ($canView) {
             //Define temp item
             $newItem = [];
@@ -115,11 +116,9 @@ class NewsParser extends BaseParser
             $owner = UserProfile::find()->andWhere(['user_id' => $item->created_by])->one();
 
             //Image
-            $image = $item->newsImage;
-
+            $document = $item->documentMainFile;
             //Fill fields from item usable in app
             $newItem['fields'] = [
-                'slug' => $item->slug,
                 'titolo' => self::flushHtml($item->titolo),
                 'sottotitolo' => self::flushHtml($item->sottotitolo),
                 'descrizione_breve' => self::flushHtml($item->descrizione_breve),
@@ -128,14 +127,17 @@ class NewsParser extends BaseParser
                 'created_at' => $item->created_at,
                 'created_by' => $item->created_by,
                 'comments_enabled' => $item->comments_enabled,
+                'is_folder' => $item->is_folder,
+                'parent_id' => $item->parent_id,
                 'owner' => [
                     'nome' => $owner->nome,
                     'cognome' => $owner->cognome,
                     'presentazione_breve' => $owner->presentazione_breve,
                     'avatarUrl' => $owner->avatarWebUrl,
                 ],
-                'newsImageUrl' => $image ? Yii::$app->getUrlManager()->createAbsoluteUrl($image->getWebUrl()) : null,
+                'documentUrl' => $document ? Yii::$app->getUrlManager()->createAbsoluteUrl($document->getWebUrl()) : null,
             ];
+
             $url = '';
             if (self::isContentShared($item)) {
                 $view_url = $item->getViewUrl();
@@ -149,7 +151,6 @@ class NewsParser extends BaseParser
 
             //Can edit
             $newItem['canEdit'] = Yii::$app->user->can($editPremission, ['model' => $item]);
-
             return $newItem;
         }
 

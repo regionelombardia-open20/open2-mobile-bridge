@@ -11,19 +11,12 @@
 
 namespace open20\amos\mobile\bridge\modules\v1\controllers;
 
-use open20\amos\admin\AmosAdmin;
-use open20\amos\admin\models\UserProfile;
-use open20\amos\attachments\components\FileImport;
-use open20\amos\core\user\User;
-use open20\amos\socialauth\models\SocialAuthUsers;
-use open20\amos\socialauth\Module;
-use Yii;
-use yii\base\Exception;
+use yii\base\Event;
 use yii\filters\AccessControl;
+use yii\filters\auth\CompositeAuth;
 use yii\filters\auth\HttpBearerAuth;
-use yii\web\Controller;
-use yii\web\UrlManager;
 use yii\helpers\ArrayHelper;
+use yii\rest\Controller;
 
 /**
  * Class FileController
@@ -36,39 +29,29 @@ class DefaultController extends Controller
      */
     public function behaviors()
     {
-        return [
+        $behaviours = parent::behaviors();
+        unset($behaviours['authenticator']);
+
+        return ArrayHelper::merge($behaviours, [
             'authenticator' => [
-                'class' => HttpBearerAuth::className(),
-            ],
-            'access' => [
-                'class' => AccessControl::className(),
-                'rules' => [
-                    [
-                        'allow' => true,
-                        'actions' => [
-                            'index',
-                        ],
-                        //'roles' => ['@']
-                    ],
-                    [
-                        'allow' => true,
-                        'actions' => [
-                            'sign-in',
-                            'sign-up',
-                        ],
-                        //'roles' => ['*']
+                'class' => CompositeAuth::className(),
+                'authMethods' => [
+                    'bearerAuth' => [
+                        'class' => HttpBearerAuth::className(),
                     ]
                 ],
-            ],
-        ];
+            ]
+        ]);
     }
 
-    public function actionIndex() {
-        echo "aaaaa";
-    }
-
-    public function actionSignIn()
+    public function init()
     {
-        echo "7";die;
+        parent::init();
+
+        //Drop CSRF cause is API
+        $this->enableCsrfValidation = false;
+
+        //Drop Events on login
+        Event::off(\yii\web\User::className(), \yii\web\User::EVENT_AFTER_LOGIN);
     }
 }

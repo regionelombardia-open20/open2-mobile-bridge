@@ -26,7 +26,7 @@ use yii\helpers\ArrayHelper;
 use yii\rest\Controller;
 use yii\swiftmailer\Logger;
 
-class SecurityController extends Controller
+class SecurityController extends DefaultController
 {
 
     /**

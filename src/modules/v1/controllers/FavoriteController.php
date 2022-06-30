@@ -2,20 +2,14 @@
 namespace open20\amos\mobile\bridge\modules\v1\controllers;
 
 use open20\amos\favorites\AmosFavorites;
-use open20\amos\favorites\exceptions\FavoritesException;
 use open20\amos\favorites\widgets\FavoriteWidget;
-use open20\amos\notificationmanager\AmosNotify;
-
 use Yii;
-use yii\filters\auth\CompositeAuth;
-use yii\filters\auth\HttpBearerAuth;
 use yii\filters\VerbFilter;
 use yii\helpers\ArrayHelper;
 use yii\httpclient\Exception;
 use yii\log\Logger;
-use yii\rest\Controller;
 
-class FavoriteController extends Controller
+class FavoriteController extends DefaultController
 {
     /**
      * @inheritdoc
@@ -23,19 +17,10 @@ class FavoriteController extends Controller
     public function behaviors()
     {
         $behaviours = parent::behaviors();
-        unset($behaviours['authenticator']);
 
         return ArrayHelper::merge($behaviours, [
-            'authenticator' => [
-                'class' => CompositeAuth::class,
-                'authMethods' => [
-                    'bearerAuth' => [
-                        'class' => HttpBearerAuth::class,
-                    ]
-                ],
-            ],
             'verbFilter' => [
-                'class' => VerbFilter::class,
+                'class' => VerbFilter::className(),
                 'actions' => [
                     'favorite' => ['post'],
                 ],

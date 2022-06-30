@@ -3,12 +3,14 @@
 namespace open20\amos\mobile\bridge\modules\v1\controllers;
 
 use open20\amos\discussioni\models\DiscussioniTopic;
+use open20\amos\documenti\models\Documenti;
 use open20\amos\events\AmosEvents;
 use open20\amos\events\models\Event;
 use open20\amos\events\models\EventInvitation;
 use open20\amos\events\models\search\EventSearch;
 use open20\amos\events\utility\EventsUtility;
 use open20\amos\mobile\bridge\modules\v1\actions\entitydata\parsers\DiscussioniParser;
+use open20\amos\mobile\bridge\modules\v1\actions\entitydata\parsers\DocumentiParser;
 use open20\amos\mobile\bridge\modules\v1\actions\entitydata\parsers\EventPlatformParser;
 use open20\amos\mobile\bridge\modules\v1\actions\entitydata\parsers\NewsParser;
 use open20\amos\mobile\bridge\modules\v1\actions\entitydata\parsers\PartecipantsParser;
@@ -27,7 +29,7 @@ use yii\helpers\Url;
 use yii\log\Logger;
 use yii\rest\Controller;
 
-class EventPlatformController extends Controller
+class EventPlatformController extends DefaultController
 {
 
     /**
@@ -36,18 +38,9 @@ class EventPlatformController extends Controller
     public function behaviors()
     {
         $behaviours = parent::behaviors();
-        unset($behaviours['authenticator']);
 
         return ArrayHelper::merge($behaviours,
                 [
-                    'authenticator' => [
-                        'class' => CompositeAuth::className(),
-                        'authMethods' => [
-                            'bearerAuth' => [
-                                'class' => HttpBearerAuth::className(),
-                            ]
-                        ],
-                    ],
                     'verbFilter' => [
                         'class' => VerbFilter::className(),
                         'actions' => [
@@ -55,6 +48,8 @@ class EventPlatformController extends Controller
                             'event-detail' => ['get'],
                             'event-news-list' => ['get'],
                             'event-discussions-list' => ['get'],
+                            'event-documenti-list' => ['get'],
+                            'event-sondaggi-list' => ['get'],
                             'event-qr-code' => ['get'],
                             'event-user-role' => ['get'],
                             'event-ticket' => ['get'],
@@ -68,8 +63,7 @@ class EventPlatformController extends Controller
      * 
      * @return type
      */
-    public function actionEventsList($offset = null, $limit = null,
-                                     $from_date = null, $to_date = null)
+    public function actionEventsList($offset = null, $limit = null, $from_date = null, $to_date = null)
     {
         $list = [];
         try {
@@ -100,15 +94,25 @@ class EventPlatformController extends Controller
 
             $query = Event::find();
             $query->innerJoin($eventTypeModel::tableName(), $eventTypeModel::tableName() .'.id = '. Event::tableName() . '.event_type_id');
-            $query->andWhere(['or',
-                ['and', [$eventTypeModel::tableName() .'.event_type' => $eventTypeModel::TYPE_OPEN],
-                [$eventTypeModel::tableName() .'.limited_seats' => 0]],
-                ['or', [$eventTypeModel::tableName() .'.event_type' => $eventTypeModel::TYPE_INFORMATIVE],
-                   ['or', ['in', Event::tableName() .'.id', $subquery ], ['in', Event::tableName() .'.id', $subquery2 ]]]
+            $query->andWhere(
+                ['or',
+                    [
+                        'and',
+                        [$eventTypeModel::tableName() .'.event_type' => $eventTypeModel::TYPE_OPEN],
+                        [$eventTypeModel::tableName() .'.limited_seats' => 0]
+                    ],
+                    [ $eventTypeModel::tableName() .'.patronage' => 1],
+                    ['or',
+                       [$eventTypeModel::tableName() .'.event_type' => $eventTypeModel::TYPE_INFORMATIVE],
+                       ['or',
+                           ['in', Event::tableName() .'.id', $subquery ], ['in', Event::tableName() .'.id', $subquery2 ]
+                       ]
+                    ]
                 ]);
             
             $query->andWhere(['>=', 'end_date_hour', new Expression('NOW()')]);
             $query->addOrderBy(['begin_date_hour' => SORT_ASC]);
+
             $query->limit($limit);
             $dataProvider->query = $query;
             $listModel    = $dataProvider->getModels();
@@ -198,6 +202,42 @@ class EventPlatformController extends Controller
                 ];
                 $list       = DiscussioniParser::getItems($namespace,
                         $bodyParams);
+                $cwh->setCwhScopeInSession($old_scope);
+            }
+        } catch (Exception $ex) {
+            Yii::getLogger()->log($ex->getMessage(), Logger::LEVEL_ERROR);
+        }
+        return $list;
+    }
+
+
+    /**
+     *
+     * @param type $event_id
+     * @param type $offset
+     * @param type $limit
+     * @return type
+     */
+    public function actionEventDocumentiList($event_id, $offset = null,
+                                               $limit = null)
+    {
+        $list = [];
+        try {
+            $event = Event::findOne(['id' => $event_id]);
+            if (!is_null($event)) {
+                $cwh        = $this->loadCwh();
+                $old_scope  = $cwh->getCwhScope();
+                $cwh->setCwhScopeInSession([
+                    'community' => $event->community_id
+                ]);
+                $namespace  = Documenti::className();
+                $bodyParams = [
+                    'namespace' => $namespace,
+                    'offset' => $offset,
+                    'limit' => $limit
+                ];
+                $list       = DocumentiParser::getItems($namespace,
+                    $bodyParams);
                 $cwh->setCwhScopeInSession($old_scope);
             }
         } catch (Exception $ex) {

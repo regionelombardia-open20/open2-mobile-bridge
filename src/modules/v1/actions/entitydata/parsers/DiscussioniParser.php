@@ -29,7 +29,7 @@ class DiscussioniParser extends BaseParser
     public static function getItems($namespace, $bodyParams)
     {
         //Paginated offset
-1        $offset = $bodyParams['offset'] - 1;
+        $offset = isset($bodyParams['offset']) ? $bodyParams['offset'] - 1 : 0;
 
         //Check limit is set
         $limit = (int)$bodyParams['limit'] ?: 20;
