@@ -65,16 +65,17 @@ class Module extends AmosModule implements BootstrapInterface
         //Configuration
         //$config = require(__DIR__ . DIRECTORY_SEPARATOR . 'config' . DIRECTORY_SEPARATOR . 'config.php');
         //Yii::configure($this, ArrayHelper::merge($config, $this));
+        if(!(\Yii::$app instanceof \yii\console\Application)){
+            if (!is_null(Yii::$app->request)) {
+                if (strpos(Yii::$app->request->url, self::getModuleName())) {
 
-        if (!is_null(Yii::$app->request)) {
-            if (strpos(Yii::$app->request->url, self::getModuleName())) {
+                    //Override user identity
+                    Yii::$app->set('user', $this->user);
 
-                //Override user identity
-                Yii::$app->set('user', $this->user);
-
-                //Override request component
-                Yii::$app->set('request', $this->request);
-            }
+                    //Override request component
+                    Yii::$app->set('request', $this->request);
+                }
+            } 
         }
     }
 
