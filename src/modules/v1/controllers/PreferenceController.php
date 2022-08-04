@@ -99,6 +99,21 @@ class PreferenceController extends DefaultController
     }
 
     /**
+     * Il permesso di accedere ai dati solo se non dell'utente loggato o se a richiedere è l'utente 2 appguest
+     *
+     * @param $userId
+     * @return void
+     * @throws ForbiddenHttpException
+     */
+    private function checkUserSecurity($userId) {
+        if ((Yii::$app->user->id == 2) || (Yii::$app->user->id == $userId)) {
+            return;
+        }
+
+        throw new ForbiddenHttpException('Not allowed call');
+    }
+
+    /**
      *
      * @param type $email
      * @return type
@@ -207,7 +222,9 @@ class PreferenceController extends DefaultController
      * @throws Exception
      */
     public function actionGetTargets($userId = null)
-    {   
+    {
+        $this->checkUserSecurity($userId);
+
         \Yii::$app->response->format = \yii\web\Response::FORMAT_JSON;
         $ret = ['code' => 0, 'message' => 'Response OK'];
         try {
@@ -227,6 +244,8 @@ class PreferenceController extends DefaultController
      */
     public function actionGetLanguage($userId = null)
     {
+        $this->checkUserSecurity($userId);
+
         \Yii::$app->response->format = \yii\web\Response::FORMAT_JSON;
         $ret = ['code' => 0, 'message' => 'Response OK'];
         try {
@@ -269,6 +288,8 @@ class PreferenceController extends DefaultController
         try {
             $bodyParams = \Yii::$app->getRequest()->getBodyParams();
             $userId = isset($bodyParams['user_id'])? $bodyParams['user_id']: null;
+            $this->checkUserSecurity($userId);
+
             /** @var UserProfile $userProfile */
             $userProfile = UserProfile::findOne(['user_id' => $userId]);
             if (empty($userProfile)) {
@@ -321,7 +342,9 @@ class PreferenceController extends DefaultController
      * @throws Exception
      */
     public function actionGetTopics($targetCode, $userId = null)
-    {   
+    {
+        $this->checkUserSecurity($userId);
+
         \Yii::$app->response->format = \yii\web\Response::FORMAT_JSON;
         $ret = ['code' => 0, 'message' => 'Response OK'];
         try {
@@ -439,6 +462,8 @@ class PreferenceController extends DefaultController
      */
     public function actionGetComunicationsByUser($userId = null, string $filterTargets = null, string $filterDateFrom = null, string $filterDateTo = null, string $filterItems = null)
     {
+        $this->checkUserSecurity($userId);
+
         \Yii::$app->response->format = \yii\web\Response::FORMAT_JSON;
 
         if (is_null($userId)) {
@@ -586,6 +611,13 @@ class PreferenceController extends DefaultController
                     $toret['contents'][$container->id]['description'] = $container->content_text;
                     $toret['contents'][$container->id]['news_url'] = $container->getContentLink();                    
                     $toret['contents'][$container->id]['image_url'] = (!empty($container->contentImage))? $container->contentImage->getWebUrl(): null;
+
+                    if (!empty($container->preferenceEvento)) {
+                        $event = $container->preferenceEvento;
+                        $toret['contents'][$container->id]['event_location'] = $event->location . (!empty($event->location_entrance)? (' - ' . $event->location_entrance): '');
+                        $toret['contents'][$container->id]['event_start_datetime'] = $event->date_start;
+                        $toret['contents'][$container->id]['event_end_datetime'] = $event->date_end;
+                    }
                 }
             }
         }
@@ -615,6 +647,8 @@ class PreferenceController extends DefaultController
      */
     public function actionGetUserById($userId)
     {
+        $this->checkUserSecurity($userId);
+
         \Yii::$app->response->format = \yii\web\Response::FORMAT_JSON;
 
         $toret = [
@@ -737,6 +771,8 @@ class PreferenceController extends DefaultController
      */
     public function actionUpdateUserById($userId)
     {
+        $this->checkUserSecurity($userId);
+
         \Yii::$app->response->format = \yii\web\Response::FORMAT_JSON;
         $toret = [
             'status' => null,
@@ -875,6 +911,9 @@ class PreferenceController extends DefaultController
      */
     public function actionGetAllFavorite($className, $userId)
     {
+
+        $this->checkUserSecurity($userId);
+
         $notify = Yii::$app->getModule('notify');
         $toret = [
             'status' => null,
@@ -954,6 +993,8 @@ class PreferenceController extends DefaultController
         $bodyParams = \Yii::$app->getRequest()->getBodyParams();
 
         $userId = isset($bodyParams['user_id'])? $bodyParams['user_id']: null;
+        $this->checkUserSecurity($userId);
+
         /** @var UserProfile $userProfile */
         $userProfile = UserProfile::findOne(['user_id' => $userId]);
         if (empty($userProfile)) {
@@ -1053,6 +1094,7 @@ class PreferenceController extends DefaultController
         $bodyParams = \Yii::$app->getRequest()->getBodyParams();
         $email = isset($bodyParams['email'])? $bodyParams['email']: null;
         $userId = isset($bodyParams['userId'])? $bodyParams['userId']: null;
+        $this->checkUserSecurity($userId);
 
         $userProfile = UserProfile::findOne(['user_id' => $userId]);
         if (empty($userProfile)) {
@@ -1093,6 +1135,8 @@ class PreferenceController extends DefaultController
         $bodyParams = \Yii::$app->getRequest()->getBodyParams();
         $email = isset($bodyParams['email'])? $bodyParams['email']: null;
         $userId = isset($bodyParams['userId'])? $bodyParams['userId']: null;
+        $this->checkUserSecurity($userId);
+
         $otp = isset($bodyParams['otp'])? $bodyParams['otp']: null;
 
         $userProfile = UserProfile::findOne(['user_id' => $userId]);
@@ -1128,13 +1172,13 @@ class PreferenceController extends DefaultController
         return $toret;
     }
 
-    /**
-     *
-     * @param string $cod_tematica
-     * @return array
-     */
-    public function actionTopic($cod_tematica)
-    {
-        return Json::encode(['code' => 1, 'decription' => 'test']);
-    }
+//    /**
+//     *
+//     * @param string $cod_tematica
+//     * @return array
+//     */
+//    public function actionTopic($cod_tematica)
+//    {
+//        return Json::encode(['code' => 1, 'decription' => 'test']);
+//    }
 }
