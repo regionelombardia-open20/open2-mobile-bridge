@@ -39,9 +39,18 @@ class NotificationPushUtility
      */
     public static function sendNotification($user_id, $title, $body, $content_type, $content_id)
     {
+
+        $isConsole = false;
+        if(\Yii::$app instanceof Console){
+            $isConsole = true;
+        }
+
         $ret = false;
         $user = User::findOne(['id' => $user_id]);
-        Console::stdout("Notifica a $user_id" . PHP_EOL);
+
+        if($isConsole) {
+            Console::stdout("Notifica a $user_id" . PHP_EOL);
+        }
 
 
         \Yii::error("Notifica a {$user_id}");
@@ -87,7 +96,9 @@ class NotificationPushUtility
                         }
                     }
 
-//                    Console::stdout('--- Device ' . json_encode($result) . PHP_EOL);
+                    if($isConsole) {
+                        Console::stdout('--- Device ' . json_encode($result) . PHP_EOL);
+                    }
 
                     \Yii::error("Risultato notifica " . json_encode($result));
                 }

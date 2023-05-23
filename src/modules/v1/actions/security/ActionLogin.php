@@ -53,9 +53,7 @@ class ActionLogin extends Action
                 $User = User::findByUsernameOrEmail($LoginForm->username);
 
                 if ($User && $User->validatePassword($LoginForm->password)) {
-
                     $token = $User->refreshAccessToken($tokenDevice, $osDevice);
-
                     $User->save();
                     $result = $User->toArray(
                         [

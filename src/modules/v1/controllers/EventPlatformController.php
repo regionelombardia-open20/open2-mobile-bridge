@@ -2,11 +2,14 @@
 
 namespace open20\amos\mobile\bridge\modules\v1\controllers;
 
+use open20\amos\admin\models\UserProfile;
+use open20\amos\admin\utility\UserProfileMailUtility;
 use open20\amos\discussioni\models\DiscussioniTopic;
 use open20\amos\documenti\models\Documenti;
 use open20\amos\events\AmosEvents;
 use open20\amos\events\models\Event;
 use open20\amos\events\models\EventInvitation;
+use open20\amos\events\models\EventParticipantCompanion;
 use open20\amos\events\models\search\EventSearch;
 use open20\amos\events\utility\EventsUtility;
 use open20\amos\mobile\bridge\modules\v1\actions\entitydata\parsers\DiscussioniParser;
@@ -18,7 +21,9 @@ use open20\amos\mobile\bridge\modules\v1\actions\entitydata\parsers\SondaggiPars
 use open20\amos\mobile\bridge\modules\v1\utility\EventUtility;
 use open20\amos\news\models\News;
 use open20\amos\sondaggi\models\search\SondaggiSearch;
+use open20\amos\tag\models\Tag;
 use Exception;
+use kartik\mpdf\Pdf;
 use Yii;
 use yii\db\Expression;
 use yii\filters\auth\CompositeAuth;
@@ -40,27 +45,41 @@ class EventPlatformController extends DefaultController
         $behaviours = parent::behaviors();
 
         return ArrayHelper::merge($behaviours,
-                [
-                    'verbFilter' => [
-                        'class' => VerbFilter::className(),
-                        'actions' => [
-                            'events-list' => ['get'],
-                            'event-detail' => ['get'],
-                            'event-news-list' => ['get'],
-                            'event-discussions-list' => ['get'],
-                            'event-documenti-list' => ['get'],
-                            'event-sondaggi-list' => ['get'],
-                            'event-qr-code' => ['get'],
-                            'event-user-role' => ['get'],
-                            'event-ticket' => ['get'],
-                            'event-has-ticket' => ['get'],
-                        ],
+            [
+                'verbFilter' => [
+                    'class' => VerbFilter::className(),
+                    'actions' => [
+                        'events-list' => ['get'],
+                        'event-detail' => ['get'],
+                        'event-news-list' => ['get'],
+                        'event-discussions-list' => ['get'],
+                        'event-documenti-list' => ['get'],
+                        'event-sondaggi-list' => ['get'],
+                        'event-qr-code' => ['get'],
+                        'event-user-role' => ['get'],
+                        'event-ticket' => ['get'],
+                        'event-has-ticket' => ['get'],
+                        'event-changes' => ['get'],
+                        'delete-account' => ['get'],
                     ],
-        ]);
+                ],
+            ]);
+    }
+
+    public function beforeAction($action)
+    {
+        if (\Yii::$app->request->get('language')) {
+            \Yii::$app->language = \Yii::$app->request->get('language');
+        } else {
+            \Yii::$app->language = 'it-IT';
+        }
+
+        return parent::beforeAction($action);
+
     }
 
     /**
-     * 
+     *
      * @return type
      */
     public function actionEventsList($offset = null, $limit = null, $from_date = null, $to_date = null)
@@ -83,15 +102,14 @@ class EventPlatformController extends DefaultController
             //$cwh          = $this->loadCwh();
             //$cwh->resetCwhScopeInSession();
             $dataProvider = $search->searchMyInvitations($params);
-            $subquery        = $dataProvider->query;
-            $subquery->select(Event::tableName() .'.id');
+            $subquery = $dataProvider->query;
+            $subquery->select(Event::tableName() . '.id');
             $subquery->andWhere(['>=', 'end_date_hour', new Expression('NOW()')]);
 
             $dataProvider2 = $search->searchMyRegistrations($params);
-            $subquery2        = $dataProvider2->query;
-            $subquery2->select(Event::tableName() .'.id');
+            $subquery2 = $dataProvider2->query;
+            $subquery2->select(Event::tableName() . '.id');
             $subquery2->andWhere(['>=', 'end_date_hour', new Expression('NOW()')]);
-
             $now = date('Y-m-d H:i:s');
             $query = Event::find();
             $query->innerJoinWith('eventType')
@@ -99,11 +117,11 @@ class EventPlatformController extends DefaultController
                     ['!= ', 'event_type.event_type', $eventTypeModel::TYPE_UPON_INVITATION],
                     ['AND',
                         ['=', 'event_type.event_type', $eventTypeModel::TYPE_UPON_INVITATION],
-                        ['in', Event::tableName() .'.id', $subquery ],
+                        ['in', Event::tableName() . '.id', $subquery],
                     ],
                     ['AND',
                         ['=', 'event_type.event_type', $eventTypeModel::TYPE_UPON_INVITATION],
-                        ['in', Event::tableName() .'.id', $subquery2 ],
+                        ['in', Event::tableName() . '.id', $subquery2],
                     ],
                 ])
                 ->andWhere([Event::tableName() . '.status' => Event::EVENTS_WORKFLOW_STATUS_PUBLISHED,])
@@ -140,7 +158,7 @@ class EventPlatformController extends DefaultController
 
             $query->limit($limit);
             $dataProvider->query = $query;
-            $listModel    = $dataProvider->getModels();
+            $listModel = $dataProvider->getModels();
             foreach ($listModel as $model) {
                 $list[] = EventPlatformParser::parseItem($model);
             }
@@ -151,7 +169,7 @@ class EventPlatformController extends DefaultController
     }
 
     /**
-     * 
+     *
      * @param type $event_id
      * @return type
      */
@@ -168,7 +186,7 @@ class EventPlatformController extends DefaultController
     }
 
     /**
-     * 
+     *
      * @param type $event_id
      * @param type $offset
      * @param type $limit
@@ -180,18 +198,18 @@ class EventPlatformController extends DefaultController
         try {
             $event = Event::findOne(['id' => $event_id]);
             if (!is_null($event)) {
-                $cwh        = $this->loadCwh();
-                $old_scope  = $cwh->getCwhScope();
+                $cwh = $this->loadCwh();
+                $old_scope = $cwh->getCwhScope();
                 $cwh->setCwhScopeInSession([
                     'community' => $event->community_id
                 ]);
-                $namespace  = News::className();
+                $namespace = News::className();
                 $bodyParams = [
                     'namespace' => $namespace,
                     'offset' => $offset,
                     'limit' => $limit
                 ];
-                $list       = NewsParser::getItems($namespace, $bodyParams);
+                $list = NewsParser::getItems($namespace, $bodyParams);
                 $cwh->setCwhScopeInSession($old_scope);
             }
         } catch (Exception $ex) {
@@ -201,7 +219,7 @@ class EventPlatformController extends DefaultController
     }
 
     /**
-     * 
+     *
      * @param type $event_id
      * @param type $offset
      * @param type $limit
@@ -214,19 +232,19 @@ class EventPlatformController extends DefaultController
         try {
             $event = Event::findOne(['id' => $event_id]);
             if (!is_null($event)) {
-                $cwh        = $this->loadCwh();
-                $old_scope  = $cwh->getCwhScope();
+                $cwh = $this->loadCwh();
+                $old_scope = $cwh->getCwhScope();
                 $cwh->setCwhScopeInSession([
                     'community' => $event->community_id
                 ]);
-                $namespace  = DiscussioniTopic::className();
+                $namespace = DiscussioniTopic::className();
                 $bodyParams = [
                     'namespace' => $namespace,
                     'offset' => $offset,
                     'limit' => $limit
                 ];
-                $list       = DiscussioniParser::getItems($namespace,
-                        $bodyParams);
+                $list = DiscussioniParser::getItems($namespace,
+                    $bodyParams);
                 $cwh->setCwhScopeInSession($old_scope);
             }
         } catch (Exception $ex) {
@@ -244,24 +262,24 @@ class EventPlatformController extends DefaultController
      * @return type
      */
     public function actionEventDocumentiList($event_id, $offset = null,
-                                               $limit = null)
+                                             $limit = null)
     {
         $list = [];
         try {
             $event = Event::findOne(['id' => $event_id]);
             if (!is_null($event)) {
-                $cwh        = $this->loadCwh();
-                $old_scope  = $cwh->getCwhScope();
+                $cwh = $this->loadCwh();
+                $old_scope = $cwh->getCwhScope();
                 $cwh->setCwhScopeInSession([
                     'community' => $event->community_id
                 ]);
-                $namespace  = Documenti::className();
+                $namespace = Documenti::className();
                 $bodyParams = [
                     'namespace' => $namespace,
                     'offset' => $offset,
                     'limit' => $limit
                 ];
-                $list       = DocumentiParser::getItems($namespace,
+                $list = DocumentiParser::getItems($namespace,
                     $bodyParams);
                 $cwh->setCwhScopeInSession($old_scope);
             }
@@ -272,7 +290,7 @@ class EventPlatformController extends DefaultController
     }
 
     /**
-     * 
+     *
      * @param type $event_id
      * @param type $offset
      * @param type $limit
@@ -285,13 +303,13 @@ class EventPlatformController extends DefaultController
         try {
             $event = Event::findOne(['id' => $event_id]);
             if (!is_null($event)) {
-                $cwh       = $this->loadCwh();
+                $cwh = $this->loadCwh();
                 $old_scope = $cwh->getCwhScope();
                 $cwh->setCwhScopeInSession([
                     'community' => $event->community_id
                 ]);
-                $params    = [];
-                $search    = new SondaggiSearch();
+                $params = [];
+                $search = new SondaggiSearch();
                 if (!is_null($offset)) {
                     $params['offest'] = $offset;
                 }
@@ -300,7 +318,7 @@ class EventPlatformController extends DefaultController
                 }
 
                 $dataProvider = $search->searchOwnInterest($params);
-                $listModel    = $dataProvider->getModels();
+                $listModel = $dataProvider->getModels();
                 foreach ($listModel as $model) {
                     $list[] = SondaggiParser::parseItem($model);
                 }
@@ -313,7 +331,7 @@ class EventPlatformController extends DefaultController
     }
 
     /**
-     * 
+     *
      * @return type
      * @throws Exception
      */
@@ -330,7 +348,7 @@ class EventPlatformController extends DefaultController
     }
 
     /**
-     * 
+     *
      * @param integer $event_id
      * @return typepartecipants
      */
@@ -352,7 +370,7 @@ class EventPlatformController extends DefaultController
     }
 
     /**
-     * 
+     *
      * @param type $event_id
      * @param type $participant_id
      * @param type $companion_id
@@ -360,19 +378,19 @@ class EventPlatformController extends DefaultController
     public function actionEventQrCode($event_id, $user_id)
     {
         try {
-            return $this->actionEventTicket($event_id);
+            return $this->actionEventTicket($event_id, $user_id);
             $event = Event::findOne(['id' => $event_id]);
             if (!is_null($event)) {
                 $partecipantsQuery = $event->getCommunityUserMm();
                 $partecipantsQuery->andWhere(['user_id' => $user_id]);
-                $partecipant       = $partecipantsQuery->one();
+                $partecipant = $partecipantsQuery->one();
                 if (!is_null($partecipant)) {
                     $invitation = EventInvitation::findOne(['event_id' => $event_id,
-                            'user_id' => $user_id]);
+                        'user_id' => $user_id]);
                     if ($invitation) {
-                        return \QRcode::svg(Url::base(true).Url::toRoute(['register-participant',
-                                    'eid' => $event_id, 'pid' => $user_id, 'iid' => $invitation->id]),
-                                "qrcode", false, QR_ECLEVEL_H, 200);
+                        return \QRcode::svg(Url::base(true) . Url::toRoute(['register-participant',
+                                'eid' => $event_id, 'pid' => $user_id, 'iid' => $invitation->id]),
+                            "qrcode", false, QR_ECLEVEL_H, 200);
                     }
                 }
             }
@@ -384,7 +402,7 @@ class EventPlatformController extends DefaultController
     }
 
     /**
-     * 
+     *
      * @param type $event_id
      * @return type
      */
@@ -395,7 +413,7 @@ class EventPlatformController extends DefaultController
             if (!is_null($event)) {
                 $partecipantsQuery = $event->getCommunityUserMm();
                 $partecipantsQuery->andWhere(['user_id' => \Yii::$app->getUser()->id]);
-                $partecipant       = $partecipantsQuery->one();
+                $partecipant = $partecipantsQuery->one();
                 if (!is_null($partecipant)) {
                     return ['role' => $partecipant->role];
                 }
@@ -408,17 +426,24 @@ class EventPlatformController extends DefaultController
     }
 
     /**
-     * 
+     * @param null $event_id
+     * @param null $user_id
+     * @return null|string
      */
-    public function actionEventTicket($event_id = null)
+    public function actionEventTicket($event_id = null, $user_id = null)
     {
+
+        ///------------------------------
         try {
             /* $url = \Yii::$app->params['platform']['backendUrl'].'/img/dem_app_v2.jpg';
               return "<div><img style='max-width: 100%' src='".$url ."'> </div>"; */
-
-            $file_jpg = EventsUtility::createDownloadTicket($event_id);
+            $file_jpg = EventsUtility::createDownloadTicket($event_id, $user_id, true);
+            $invitation = EventInvitation::find()->andWhere(['event_id' => $event_id, 'user_id' => $user_id])->one();
+            if ($invitation) {
+                $file_jpg = $invitation->getTicketImage()->getWebUrl();
+            }
             if (!empty($file_jpg)) {
-                return "<div><img style='max-width: 100%' src='".\Yii::$app->params['platform']['backendUrl'].'/'.$file_jpg."' /></div>";
+                return "<div><img style='max-width: 100%' src='" . \Yii::$app->params['platform']['backendUrl'] . $file_jpg . "' /></div>";
             }
         } catch (Exception $ex) {
             Yii::getLogger()->log($ex->getMessage(), Logger::LEVEL_ERROR);
@@ -426,13 +451,102 @@ class EventPlatformController extends DefaultController
         return null;
     }
 
+
     /**
-     * 
-     * @param integer $event_id
+     * @param $event_id
+     * @return bool
      */
     public function actionEventHasTicket($event_id)
     {
-
         return EventUtility::EventHasTicket($event_id);
     }
+
+    /**
+     * @return array
+     * @throws \yii\base\InvalidConfigException
+     */
+    public function actionUpdateCompanions()
+    {
+        $user_id = \Yii::$app->request->post('user_id');
+        $event_id = \Yii::$app->request->post('event_id');
+        $enable_companions = \Yii::$app->request->post('enable_companions');
+        $n_companions = \Yii::$app->request->post('n_companions');
+        $isOk = false;
+
+        $event = Event::findOne($event_id);
+        $invitation = EventInvitation::find()->andWhere(['user_id' => $user_id, 'event_id' => $event_id])->one();
+        if ($invitation) {
+            $eventControllers = new \open20\amos\events\controllers\EventController('event', \Yii::$app->getModule('events'));
+            EventParticipantCompanion::deleteAll(['event_invitation_id' => $invitation->id]);
+            $companions = $invitation->generateCompanions($n_companions);
+            foreach ($companions as $companion) {
+                $eventControllers->addCompanion($event->id, $invitation, $companion);
+            }
+            $isOk = true;
+        } else {
+            $isOk = false;
+            $errors = \Yii::t('site', "L'utente non è iscritto all'evento");
+            return [
+                'isOk' => $isOk,
+                'errors' => $errors
+            ];
+        }
+
+        return [
+            'isOk' => $isOk,
+        ];
+    }
+
+    /**
+     * @param $event_id
+     * @param $user_id
+     * @return array
+     * @throws \yii\base\InvalidConfigException
+     */
+    public function actionSelectAvailableCompanions($event_id, $user_id)
+    {
+        $model = Event::findOne($event_id);
+        $nCompanions = 0;
+        /** @var  $invitation EventInvitation */
+        $invitation = EventInvitation::find()->andWhere(['user_id' => $user_id, 'event_id' => $event_id])->one();
+        if ($invitation) {
+            $nCompanions = $invitation->getCompanions()->andWhere(['event_participant_companion.deleted_at' => null])->count();
+        }
+
+
+        $dataCompanions = $model->getListNcompanions();
+        if (count($dataCompanions) < $nCompanions) {
+            $dataCompanions = [];
+            $list = range(1, $nCompanions);
+            foreach ($list as $n) {
+                $dataCompanions[$n] = $n;
+            }
+        }
+        return [$dataCompanions];
+    }
+
+    /**
+     * @param null $user_id
+     * @return array|false[]
+     * @throws \yii\base\InvalidConfigException
+     */
+    public function actionDeleteAccount($user_id = null)
+    {
+        if (empty($user_id)) {
+            $user_id = \Yii::$app->user->id;
+        }
+        $userProfile = UserProfile::find()->andWhere(['user_id'=> $user_id])->one();
+        if($userProfile){
+            $ok = UserProfileMailUtility::sendEmailDropAccountRequest($userProfile);
+            return [
+                'isOk' => $ok
+            ];
+
+        }
+        return [
+            'isOk' => false
+        ];
+
+    }
+
 }

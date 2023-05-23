@@ -81,6 +81,9 @@ class ActionItemComments extends Action
 
                 $replies = $comment->commentReplies;
 
+                //Creator profile
+                $owner = UserProfile::findOne(['id' => $comment->created_by]);
+
                 foreach ($replies as $reply) {
                     //Creator profile
                     $rep_owner = UserProfile::findOne(['id' => $reply->created_by]);
@@ -98,8 +101,7 @@ class ActionItemComments extends Action
                     ];
                 }
 
-                //Creator profile
-                $owner = UserProfile::findOne(['id' => $comment->created_by]);
+
 
                 $commentsArray[] = [
                     'id' => $comment->id,

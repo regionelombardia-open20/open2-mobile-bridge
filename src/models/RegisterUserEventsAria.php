@@ -546,11 +546,25 @@ class RegisterUserEventsAria extends Model
         $dataParticipant ['email'] = $this->email;
         $eventControllers = new EventController('event',
             \Yii::$app->getModule('events'));
-        $ok = $eventControllers->addParticipant($event->id,
-            $dataParticipant, $user_id, $gdpr);
+        $invitation = $eventControllers->addParticipant($event->id, $dataParticipant, $user_id, $gdpr);
+
+        $n = 0;
+        $nCompanions = \Yii::$app->request->post('n_companions');
+        if(!empty($nCompanions)) {
+            $n = \Yii::$app->request->post('n_companions');
+        }
+
+        $enableCompanions = \Yii::$app->request->post('enable_companions');
+        if ($invitation && $event->enable_companions && !empty($n) && $enableCompanions) {
+            $companions = $invitation->generateCompanions($n);
+            foreach ($companions as $companion) {
+                $eventControllers->addCompanion($event->id, $invitation, $companion);
+            }
+        }
         \open20\amos\core\models\UserActivityLog::registerLog(AmosEvents::t('amosevents', 'Registrazione ad un evento'), $event, Event::LOG_TYPE_SUBSCRIBE_EVENT, null, $user_id);
 
-        return $ok;
+
+        return !empty($invitation);
     }
 
     /**
@@ -799,7 +813,8 @@ class RegisterUserEventsAria extends Model
                 ['user.email' => $this->email],
                 ['user.username' => $this->email]
             ])
-            ->andWhere(['event_id' => $event->id])->count();
+            ->andWhere(['event_id' => $event->id])
+            ->count();
 
         return $isParticipant > 0;
     }

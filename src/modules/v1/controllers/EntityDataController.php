@@ -49,4 +49,15 @@ class EntityDataController extends DefaultController
             ],
         ];
     }
+
+    public function beforeAction($action){
+        if(\Yii::$app->request->get('language')){
+            \Yii::$app->language = \Yii::$app->request->get('language');
+        }else {
+            \Yii::$app->language = 'it-IT';
+        }
+
+        return parent::beforeAction($action);
+
+    }
 }

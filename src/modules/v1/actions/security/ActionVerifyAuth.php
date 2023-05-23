@@ -40,6 +40,9 @@ class ActionVerifyAuth extends Action
 
             if($token && $token->access_token) {
                 if(\Yii::$app->request->post('fcm_token')) {
+                    if(\Yii::$app->request->post('os')){
+                        $token->device_os = \Yii::$app->request->post('os');
+                    }
                     $token->fcm_token = \Yii::$app->request->post('fcm_token');
                     $token->save(false);
                 }

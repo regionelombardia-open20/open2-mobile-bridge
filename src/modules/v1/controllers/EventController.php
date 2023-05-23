@@ -281,7 +281,7 @@ class EventController extends DefaultController
     public function actionEventQrCode($event_id, $user_id)
     {
         try {
-            return $this->actionEventTicket($event_id);
+            return $this->actionEventTicket($event_id, $user_id);
             $event = Event::findOne(['id' => $event_id]);
             if (!is_null($event)) {
                 $partecipantsQuery = $event->getCommunityUserMm();
@@ -329,15 +329,17 @@ class EventController extends DefaultController
     }
 
     /**
-     * 
+     * @param null $event_id
+     * @param null $user_id
+     * @return null|string
      */
-    public function actionEventTicket($event_id = null)
+    public function actionEventTicket($event_id = null, $user_id = null)
     {
         try {
             /* $url = \Yii::$app->params['platform']['backendUrl'].'/img/dem_app_v2.jpg';
               return "<div><img style='max-width: 100%' src='".$url ."'> </div>"; */
 
-            $file_jpg = \open20\amos\events\utility\EventsUtility::createDownloadTicket($event_id);
+            $file_jpg = \open20\amos\events\utility\EventsUtility::createDownloadTicket($event_id, $user_id);
             if (!empty($file_jpg)) {
                 return "<div><img style='max-width: 100%' src='".\Yii::$app->params['platform']['backendUrl'].'/'.$file_jpg."' /></div>";
             }

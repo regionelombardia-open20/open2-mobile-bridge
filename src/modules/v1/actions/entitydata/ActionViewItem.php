@@ -31,7 +31,6 @@ class ActionViewItem extends Action
     {
         //Request params
         $bodyParams = \Yii::$app->getRequest()->getBodyParams();
-
         //Refference namespace
         $namespace = $bodyParams['namespace'];
 

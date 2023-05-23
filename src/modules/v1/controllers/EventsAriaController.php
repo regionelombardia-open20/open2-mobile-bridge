@@ -11,6 +11,7 @@
 namespace open20\amos\mobile\bridge\modules\v1\controllers;
 
 use DateTime;
+use open20\amos\admin\AmosAdmin;
 use open20\amos\admin\models\UserProfile;
 use open20\amos\admin\models\UserProfileAgeGroup;
 use open20\amos\community\models\CommunityUserMm;
@@ -19,18 +20,23 @@ use open20\amos\comuni\models\IstatNazioni;
 use open20\amos\comuni\models\IstatProvince;
 use open20\amos\core\models\ModelsClassname;
 use open20\amos\core\user\User;
+use open20\amos\events\AmosEvents;
 use open20\amos\events\models\EventInvitation;
 use open20\amos\events\models\EventLanding;
 use open20\amos\events\models\Event;
 use open20\amos\events\models\EventCategory;
 use open20\amos\events\models\EventLocation;
+use open20\amos\admin\models\UserOtpCode;
 use open20\amos\events\models\EventType;
 use open20\amos\events\utility\EventsUtility;
 use open20\amos\mobile\bridge\models\RegisterUserEventsAria;
 use open20\amos\mobile\bridge\Module;
 use open20\amos\notificationmanager\models\NotificationConf;
+use open20\amos\tag\models\EntitysTagsMm;
+use open20\amos\tag\models\Tag;
 use Exception;
 use Yii;
+use yii\db\Expression;
 use yii\filters\auth\CompositeAuth;
 use yii\filters\auth\HttpBearerAuth;
 use yii\filters\VerbFilter;
@@ -68,7 +74,11 @@ class EventsAriaController extends DefaultController
                         'unsubscribe' => ['get'],
                         'update-user-profile' => ['post'],
                         'update-notification-conf' => ['post'],
-                        'notification-conf' => ['get']
+                        'notification-conf' => ['get'],
+                        'event-children' => ['get'],
+                        'periods-by-date' => ['get'],
+                        'event-landing' => ['get'],
+                        'modify-email' => ['post'],
                     ],
                 ],
             ]);
@@ -82,29 +92,44 @@ class EventsAriaController extends DefaultController
     public function beforeAction($action)
     {
         $this->enableCsrfValidation = false;
-        \Yii::$app->language = 'it-IT';
+        if (\Yii::$app->request->get('language')) {
+            \Yii::$app->language = \Yii::$app->request->get('language');
+        } else {
+            \Yii::$app->language = 'it-IT';
+        }
         return parent::beforeAction($action);
     }
 
+
     /**
-     *
-     * @param integer $offset
-     * @param integer $limit
-     * @param string $from_date
-     * @param string $to_date
+     * @param null $offset
+     * @param null $limit
+     * @param null $from_date
+     * @param null $to_date
+     * @param null $text
+     * @param null $category
+     * @param string $order
+     * @param bool $highlighted
+     * @param string $informative_tags
+     * @return array
      */
     public function actionEventsList(
         $offset = null, $limit = null, $from_date = null, $to_date = null,
-        $text = null, $category = null, $order = 'ASC'
+        $text = null, $category = null, $order = 'ASC', $highlighted = false, $informative_tags = ''
     )
     {
+
+        if (\Yii::$app->request->get('language')) {
+            \Yii::$app->language = \Yii::$app->request->get('language');
+        }
         $list = [];
         $list_size = 0;
         try {
             $query = Event::find();
             $query->joinWith('eventLocation');
             $query->andWhere(['publish_on_prl' => 1]);
-            $query->andWhere(['or', ['event_id' => 0], ['event_id' => null]]);
+            $query->andWhere(['status' => Event::EVENTS_WORKFLOW_STATUS_PUBLISHED]);
+            $query->andWhere(['or', ['event.event_id' => 0], ['event.event_id' => null]]);
             if (!is_null($offset)) {
                 $query->offset($offset);
             }
@@ -142,7 +167,24 @@ class EventsAriaController extends DefaultController
                     ['like', EventLocation::tableName() . '.name', $text],
                 ]);
             }
-            $query->orderBy(['begin_date_hour' => $order == 'ASC' ? SORT_ASC : SORT_DESC]);
+
+            if (!empty($informative_tags)) {
+                $tagsPreference = explode(',', $informative_tags);
+                $query->leftJoin("entitys_tags_mm as tag_preference", 'tag_preference.record_id = event.id')
+                    ->andWhere(['tag_preference.classname' => Event::className()])
+                    ->andWhere(['tag_preference.deleted_at' => null])
+                    ->andWhere(['tag_preference.tag_id' => $tagsPreference]);
+            }
+
+            if ($highlighted) {
+                $query->select(new Expression('event.*, IF(n_order is NULL, 9999999, n_order) as n'));
+                $query->innerJoin('event_highlights', 'event_highlights.event_id = event.id')
+                    ->orderBy("n, event.begin_date_hour $order");
+//                print_r($query->createCommand()->rawSql); die;
+            } else {
+                $query->orderBy(['begin_date_hour' => $order == 'ASC' ? SORT_ASC : SORT_DESC]);
+            }
+
             $listModel = $query->all();
             foreach ($listModel as $event) {
                 $the_event = $this->parseEvent($event);
@@ -157,19 +199,25 @@ class EventsAriaController extends DefaultController
         } catch (Exception $ex) {
             Yii::getLogger()->log($ex->getTraceAsString(), Logger::LEVEL_ERROR);
         }
-        return Json::encode(['size' => $list_size, 'list' => $list]);
+        \Yii::$app->response->format = Response::FORMAT_JSON;
+        return ['size' => $list_size, 'list' => $list];
     }
 
     /**
-     *
-     * @param integer $offset
-     * @param integer $limit
-     * @param string $from_date
-     * @param string $to_date
+     * @param null $offset
+     * @param null $limit
+     * @param null $from_date
+     * @param null $to_date
+     * @param null $text
+     * @param null $category
+     * @param string $order
+     * @param bool $highlighted
+     * @param string $informative_tags
+     * @return array
      */
     public function actionEventsSearch(
         $offset = null, $limit = null, $from_date = null, $to_date = null,
-        $text = null, $category = null, $order = 'ASC'
+        $text = null, $category = null, $order = 'ASC', $highlighted = false, $informative_tags = ''
     )
     {
         $list = [];
@@ -178,6 +226,7 @@ class EventsAriaController extends DefaultController
             $query = Event::find();
             $query->joinWith('eventLocation');
             $query->andWhere(['publish_on_prl' => 1]);
+            $query->andWhere(['status' => Event::EVENTS_WORKFLOW_STATUS_PUBLISHED]);
             if (!is_null($offset)) {
                 $query->offset($offset);
             }
@@ -215,7 +264,22 @@ class EventsAriaController extends DefaultController
                     ['like', EventLocation::tableName() . '.name', $text],
                 ]);
             }
-            $query->orderBy(['begin_date_hour' => $order == 'ASC' ? SORT_ASC : SORT_DESC]);
+
+            if (!empty($informative_tags)) {
+                $tagsPreference = explode(',', $informative_tags);
+                $query->leftJoin("entitys_tags_mm as tag_preference", 'tag_preference.record_id = event.id')
+                    ->andWhere(['tag_preference.classname' => Event::className()])
+                    ->andWhere(['tag_preference.deleted_at' => null])
+                    ->andWhere(['tag_preference.tag_id' => $tagsPreference]);
+            }
+
+            if ($highlighted) {
+                $query->select(new Expression('event.*, IF(n_order is NULL, 9999999, n_order) as n'));
+                $query->innerJoin('event_highlights', 'event_highlights.event_id = event.id')
+                    ->orderBy("n, event.begin_date_hour $order");
+            } else {
+                $query->orderBy(['begin_date_hour' => $order == 'ASC' ? SORT_ASC : SORT_DESC]);
+            }
             $listModel = $query->all();
             foreach ($listModel as $event) {
                 $the_event = $this->parseEvent($event);
@@ -230,7 +294,9 @@ class EventsAriaController extends DefaultController
         } catch (Exception $ex) {
             Yii::getLogger()->log($ex->getTraceAsString(), Logger::LEVEL_ERROR);
         }
-        return Json::encode(['size' => $list_size, 'list' => $list]);
+
+        \Yii::$app->response->format = Response::FORMAT_JSON;
+        return ['size' => $list_size, 'list' => $list];
     }
 
     /**
@@ -248,7 +314,7 @@ class EventsAriaController extends DefaultController
         } catch (Exception $ex) {
             Yii::getLogger()->log($ex->getTraceAsString(), Logger::LEVEL_ERROR);
         }
-        return Json::encode($the_event);
+        return $the_event;
     }
 
     /**
@@ -260,6 +326,14 @@ class EventsAriaController extends DefaultController
         $formatter = \Yii::$app->formatter;
         $eventLocation = $event->eventLocation;
         $eventPlace = $eventLocation->eventPlaces;
+        $highlight = \open20\amos\events\models\EventHighlights::find()->andWhere(['event_id' => $event->id])->orderBy('id DESC')->one();
+        $highlights = 0;
+        if ($highlight) {
+            $highlights = $highlight->n_order;
+        }
+
+        //get event tagspreference
+        $preferenceTags = $this->getPreferenceTags($event);
 
         $element = [];
         $element['id'] = $event->id;
@@ -279,6 +353,8 @@ class EventsAriaController extends DefaultController
         $element['city'] = $eventPlace->city;
         $element['province'] = $eventPlace->province;
         $element['country'] = $eventPlace->country;
+        $element['highlights'] = $highlights;
+        $element['informative_tags'] = $preferenceTags;
         $element['created_at'] = $formatter->asDatetime($event->created_at,
             "dd-MM-yyyy HH:mm:ss");
         $element['created_by'] = $event->created_by;
@@ -294,6 +370,25 @@ class EventsAriaController extends DefaultController
         $element['landingUrl'] = $event->getEventUrl();
         $element['linked_events'] = $this->getEvntSons($event);
         return $element;
+    }
+
+    /**
+     * @param $event
+     * @return array
+     */
+    protected function getPreferenceTags($event)
+    {
+        $root = Tag::find()->andWhere(['codice' => Event::ROOT_TAG_PREFERENCE_CENTER])->one();
+        $preferenceTags = [];
+        $tags = Tag::find()
+            ->innerJoin('entitys_tags_mm', 'entitys_tags_mm.tag_id = tag.id')
+            ->andWhere(['root_id' => $root->id])
+            ->andWhere(['record_id' => $event->id])
+            ->all();
+        foreach ($tags as $tag) {
+            $preferenceTags [] = ['id' => $tag->id, 'name' => $tag->nome];
+        }
+        return $preferenceTags;
     }
 
     /**
@@ -344,6 +439,7 @@ class EventsAriaController extends DefaultController
 
     /**
      * @param $event_id
+     * @param $user_id
      * @return mixed
      * @throws \yii\base\InvalidConfigException
      *
@@ -351,21 +447,37 @@ class EventsAriaController extends DefaultController
      * "code" => 2, "message" => "Registrazioni chiuse",
      * "code" => 3, "message" => "Registrazioni chiuse, i posti sono esauriti",
      * "code" => 4, "message" => "Sei già registrato all'evento.",
+     * "code" => 5, "message" => "Disabilitato.",
      * ]
      */
-    public function actionFormFields($event_id)
+    public function actionFormFields($event_id, $user_id = null)
     {
         \Yii::$app->response->format = Response::FORMAT_JSON;
+        if(empty($user_id)){
+            $user_id = \Yii::$app->user->id;
+        }
+        $event = Event::findOne($event_id);
         $valuesAges = [];
         foreach (UserProfileAgeGroup::find()->all() as $age) {
             $valuesAges [$age->id] = $age->age_group;
         }
-        $valuesSex = ['Maschio' => 'Maschio', 'Femmina' => 'Femmina'];
+        $valuesSex = [
+            'Maschio' => AmosEvents::t('amosevents', 'Maschio'),
+            'Femmina' => AmosEvents::t('amosevents', 'Femmina')
+        ];
         $valuesProvince = [];
         foreach (IstatProvince::find()->andWhere(['istat_regioni_id' => 3])->orderBy('nome ASC')->all() as $provincia) {
             $valuesProvince[$provincia->id] = $provincia->nome;
         }
-        $preferencesTags = ArrayHelper::map(EventsUtility::getPreferenceCenterTags(), 'id', 'nome');
+        //preferene tags
+        $preferencesTags = EventsUtility::getPreferenceCenterTags();
+        $tagsValues = [];
+        foreach ($preferencesTags as $tag) {
+            $tagsValues [$tag->id] = AmosEvents::t('amosevents', $tag->nome);
+        }
+        $selectedCompanions = count(EventsUtility::getCompanions($event_id, $user_id));
+        $dataCompanions = $event->getListNcompanions();
+
 
         $data = [];
         try {
@@ -424,7 +536,20 @@ class EventsAriaController extends DefaultController
                 $data ['social_reg']['linkedin_reg'] = $landing->linkedin_reg;
                 $data ['social_reg']['google_reg'] = $landing->goolge_reg;
                 $data ['social_reg']['spid_cns_reg'] = $landing->spid_cns_reg;
-                $data ['preference_tags'] = $preferencesTags;
+                $data ['preference_tags'] = $tagsValues;
+
+
+                $data ['companions']['n_companions'] = [
+                    'visible' => $event->enable_companions,
+                    'type' => 'select',
+                    'values' => $dataCompanions,
+                    'n_selected_companions' => $selectedCompanions
+                ];
+                $data ['companions']['enable_companions'] = [
+                    'visible' => $event->enable_companions,
+                    'type' => 'select',
+                    'values' => [1 => AmosEvents::t('amosevents', 'Si'), 0 => AmosEvents::t('amosevents', 'No')]
+                ];
 
                 $data ['status'] = $this->getStatusForm($event);
                 $config['data'] = $data;
@@ -441,32 +566,72 @@ class EventsAriaController extends DefaultController
         return $config;
     }
 
+
+    public function isNotOverflowCompanions($model){
+
+        if($model->enable_companions) {
+            $n_companions = \Yii::$app->request->post('n_companions');
+            $enable_companions = \Yii::$app->request->post('enable_companions');
+            $max_seats = $model->seats_available;
+//            echo '-'.$max_seats.'=>max_seats-';
+//            echo '-'.$n_companions.'=>n_companions-';
+//            echo '-'.$enable_companions.'=>enable_companions-';
+
+            if (!empty($max_seats)) {
+                $now_seats = $model->checkParticipantsQuantity();
+
+                if ($enable_companions) {
+                    if (!empty($n_companions)) {
+                        $nCompanions = $n_companions;
+                        $remainingSeats = $max_seats - $now_seats;
+                        if (($remainingSeats) >= ($nCompanions + 1)) {
+                            return true;
+                        }
+                        return false;
+                    }
+                }
+            }
+            return true;
+        }
+        return true;
+    }
+
+
     /**
      * @return mixed
      * @throws \yii\base\InvalidConfigException
      */
-    public function actionSelectValues(){
+    public function actionSelectValues()
+    {
         \Yii::$app->response->format = Response::FORMAT_JSON;
 
-        $preferencesTags = ArrayHelper::map(EventsUtility::getPreferenceCenterTags(), 'id', 'nome');        $valuesAges = [];
+        $preferencesTags = EventsUtility::getPreferenceCenterTags();
+        $tagsValues = [];
+        foreach ($preferencesTags as $tag) {
+            $tagsValues [$tag->id] = AmosEvents::t('amosevents', $tag->nome);
+        }
+
+        $valuesAges = [];
         foreach (UserProfileAgeGroup::find()->all() as $age) {
             $valuesAges [$age->id] = $age->age_group;
         }
-        $valuesSex = ['Maschio' => 'Maschio', 'Femmina' => 'Femmina'];
+        $valuesSex = [
+            'Maschio' => AmosEvents::t('amosevents', 'Maschio'),
+            'Femmina' => AmosEvents::t('amosevents', 'Femmina')];
         $valuesProvince = [];
         foreach (IstatProvince::find()->orderBy('nome ASC')->all() as $provincia) {
             $valuesProvince[$provincia->id] = $provincia->nome;
         }
 
         $valuesNazioni = [];
-        $nazioni =  IstatNazioni::find()->all();
-        foreach ($nazioni as $nazione){
+        $nazioni = IstatNazioni::find()->all();
+        foreach ($nazioni as $nazione) {
             $valuesNazioni[$nazione->id] = $nazione->nome;
         }
 
         $data['isOk'] = true;
         $data['data'] = [
-            'preference_tags' => $preferencesTags,
+            'preference_tags' => $tagsValues,
             'sex' => $valuesSex,
             'age' => $valuesAges,
             'country' => $valuesProvince,
@@ -482,11 +647,17 @@ class EventsAriaController extends DefaultController
     public function actionPreferenceTags()
     {
         \Yii::$app->response->format = Response::FORMAT_JSON;
-        $preferencesTags = ArrayHelper::map(EventsUtility::getPreferenceCenterTags(), 'id', 'nome');
+        $preferencesTags = EventsUtility::getPreferenceCenterTags();
+
+        $tagsValues = [];
+        foreach ($preferencesTags as $tag) {
+            $tagsValues [$tag->id] = AmosEvents::t('amosevents', $tag->nome);
+        }
+
         return [
             'isOk' => true,
-            'data' => $preferencesTags
-            ];
+            'data' => $tagsValues
+        ];
     }
 
     /**
@@ -519,13 +690,14 @@ class EventsAriaController extends DefaultController
     /**
      * @throws \yii\base\InvalidConfigException
      */
-    public function actionCountries(){
+    public function actionCountries()
+    {
         \Yii::$app->response->format = Response::FORMAT_JSON;
 
-        $province=  IstatProvince::find()->all();
-       foreach ($province as $provincia){
-           $valuesProv[$provincia->id] = $provincia->nome;
-       }
+        $province = IstatProvince::find()->all();
+        foreach ($province as $provincia) {
+            $valuesProv[$provincia->id] = $provincia->nome;
+        }
         $data['isOk'] = true;
         $data['data'] = $valuesProv;
         return $data;
@@ -534,11 +706,12 @@ class EventsAriaController extends DefaultController
     /**
      * @throws \yii\base\InvalidConfigException
      */
-    public function actionStates(){
+    public function actionStates()
+    {
         \Yii::$app->response->format = Response::FORMAT_JSON;
 
-        $nazioni =  IstatNazioni::find()->all();
-        foreach ($nazioni as $nazione){
+        $nazioni = IstatNazioni::find()->all();
+        foreach ($nazioni as $nazione) {
             $values[$nazione->id] = $nazione->nome;
         }
         $data['isOk'] = true;
@@ -546,8 +719,6 @@ class EventsAriaController extends DefaultController
         return $data;
 
     }
-
-
 
 
     /**
@@ -658,10 +829,18 @@ class EventsAriaController extends DefaultController
             $event = Event::findOne($register->event_id);
 
             if (!empty($event)) {
+                $enableCompanions = \Yii::$app->request->post('enable_companions');
+                if($event->enable_companions && !empty($enableCompanions)){
+                   if(!$this->isNotOverflowCompanions($event)){
+                       $result['isOk'] = false;
+                       $result['errors'] = ['n_companions' => Module::t('amosmobilebridge', 'IL numero dei posti è stato superato.')];
+                       return $result;
+                   }
+                }
                 $isWaiting = $this->isSeatOverflow($event);
                 if ($register->isAlreadyPresent($event)) {
                     $result['isOk'] = false;
-                    $result['errors'] = ['email' => Module::t('amosmobilebridge','Already registered')];
+                    $result['errors'] = ['email' => Module::t('amosmobilebridge', 'Already registered')];
                     return $result;
                 }
 
@@ -679,7 +858,7 @@ class EventsAriaController extends DefaultController
                 }
             } else {
                 $result['isOk'] = false;
-                $result['errors'] = 'event_id - '.Module::t('amosmobilebridge', "L'evento non eisiste");
+                $result['errors'] = 'event_id - ' . Module::t('amosmobilebridge', "L'evento non esiste");
             }
         } catch (Exception $ex) {
             $data['isOk'] = false;
@@ -699,6 +878,8 @@ class EventsAriaController extends DefaultController
                 return true;
             }
         }
+//        echo ($now_seats.' seats occupati');
+//        echo ($max_seats.' massimo posti');
         return false;
     }
 
@@ -746,24 +927,23 @@ class EventsAriaController extends DefaultController
 
         $status = [];
         $currentPariticipants = $event->checkParticipantsQuantity();
-
         if ($event->eventType->event_type == EventType::TYPE_INFORMATIVE) {
             $status ['code'] = 5;
-            $status ['message'] = Module::t('amosmobilebridge', "Disabilitato");
-        } else if (EventsUtility::isEventParticipant($event->id, \Yii::$app->user->id)) {
+            $status ['message'] = AmosEvents::t('amosevents', "Disabilitato");
+        } else if (EventsUtility::isEventRegisteredToEvent($event->id, \Yii::$app->user->id)) {
             $status ['code'] = 4;
-            $status ['message'] = Module::t('amosmobilebridge', "Sei già registrato all'evento");
+            $status ['message'] = AmosEvents::t('amosevents', "Sei già registrato all'evento");
         } else if (!$event->isSubscribtionsOpened()) {
             $status ['code'] = 2;
-            $status ['message'] = \Yii::t('amosmobilebridge', "Registrazioni chiuse");
+            $status ['message'] = \Yii::t('amosevents', "Registrazioni chiuse");
         } else if ($event->eventType->limited_seats == true
             && ($currentPariticipants >= $event->seats_available)
             && !$event->manage_waiting_list) {
             $status ['code'] = 3;
-            $status ['message'] = Module::t('amosmobilebridge', "Registrazioni chiuse, i posti sono esauriti");
+            $status ['message'] = AmosEvents::t('amosevents', "Registrazioni chiuse, i posti sono esauriti");
         } else {
             $status ['code'] = 1;
-            $status ['message'] = Module::t('amosmobilebridge', "Registrazioni aperte");
+            $status ['message'] = AmosEvents::t('amosevents', "Registrazioni aperte");
         }
         return $status;
 
@@ -773,12 +953,14 @@ class EventsAriaController extends DefaultController
 
     /**
      * @param $event_id
+     * @param null $user_id
      * @return mixed
-     * @throws \yii\base\InvalidConfigException
      */
-    public function actionUnsubscribe($event_id)
+    public function actionUnsubscribe($event_id, $user_id = null)
     {
-        $user_id = \Yii::$app->user->id;
+        if(empty($user_id)) {
+            $user_id = \Yii::$app->user->id;
+        }
         \Yii::$app->response->format = Response::FORMAT_JSON;
         try {
             $event = Event::findOne($event_id);
@@ -788,13 +970,17 @@ class EventsAriaController extends DefaultController
                     ->andWhere(['user_id' => $user_id])->one();
                 if ($member) {
                     $member->delete();
-                    $invitation = EventInvitation::find()->andWhere(['event_id' => $event->id, 'user_id' => $user_id])->one();
-                    if ($invitation) {
-                        $invitation->delete();
-                        $result['isOk'] = true;
-                        return $result;
+                }
+                $invitation = EventInvitation::find()->andWhere(['event_id' => $event->id, 'user_id' => $user_id])->one();
+                if ($invitation) {
+                    $companions = $invitation->companions;
+                    foreach ($companions as $companion){
+                        $companion->delete();
                     }
+                    $invitation->delete();
+                    $result['isOk'] = true;
                     \open20\amos\core\models\UserActivityLog::registerLog(\Yii::t('app', 'Disiscrizione da evento'), $event, Event::LOG_TYPE_UNSUBSCRIBE_EVENT);
+                    return $result;
                 }
             }
             $result['isOk'] = false;
@@ -855,7 +1041,7 @@ class EventsAriaController extends DefaultController
                 }
             } else {
                 $data['isOk'] = false;
-                $data['errors'] = ['message' => Module::t('amosmobilebridge',"Forbidden")];
+                $data['errors'] = ['message' => Module::t('amosmobilebridge', "Forbidden")];
             }
         } catch (Exception $ex) {
             $data['isOk'] = false;
@@ -912,14 +1098,15 @@ class EventsAriaController extends DefaultController
         $user = User::findOne($user_id);
 
         //defualt values
-        $data['notifications_enabled'] =1 ;
+        $data['notifications_enabled'] = 1;
         $data['open20\amos\news\models\News']['email'] = 1;
         $data['open20\amos\news\models\News']['push'] = 1;
         $data['open20\amos\discussioni\models\DiscussioniTopic']['email'] = 1;
+        $data['open20\amos\discussioni\models\DiscussioniTopic']['push'] = 1;
         $data['open20\amos\documenti\models\Documenti']['push'] = 1;
         $data['open20\amos\documenti\models\Documenti']['email'] = 1;
-        $data['open20\amos\sondaggi\models\base\Sondagg']['push'] = 1;
-        $data['open20\amos\sondaggi\models\base\Sondagg']['email'] = 1;
+        $data['open20\amos\sondaggi\models\base\Sondaggi']['push'] = 1;
+        $data['open20\amos\sondaggi\models\base\Sondaggi']['email'] = 1;
 
         if ($user) {
             $notificationConf = NotificationConf::find()->andWhere(['user_id' => $user_id])->one();
@@ -1004,15 +1191,16 @@ class EventsAriaController extends DefaultController
      * @return bool
      * @throws \yii\base\InvalidConfigException
      */
-    public function actionIsRegisteredToEvent($event_id, $user_id = null){
+    public function actionIsRegisteredToEvent($event_id, $user_id = null)
+    {
         \Yii::$app->response->format = Response::FORMAT_JSON;
 
         $event = Event::findOne($event_id);
-        if(empty($user_id)){
+        if (empty($user_id)) {
             $user_id = \Yii::$app->user->id;
         }
         $count = 0;
-        if($event){
+        if ($event) {
             $count = CommunityUserMm::find()
                 ->andWhere(['community_id' => $event->community_id])
                 ->andWhere(['user_id' => $user_id])
@@ -1029,24 +1217,365 @@ class EventsAriaController extends DefaultController
      * @param int $type
      * @return string
      */
-    public function formatErrorsStringValidation($errors, $type = 1){
+    public function formatErrorsStringValidation($errors, $type = 1)
+    {
         $model = new RegisterUserEventsAria();
         $modelUserProfile = new UserProfile();
         $stringerror = [];
-        foreach ($errors as $attribute => $errs){
+        foreach ($errors as $attribute => $errs) {
             $labelattribute = '';
-            if($type == 1){
-                $labelattribute = Module::t('amosmbilebridge',$model->getAttributeLabel($attribute)).' ';
+            if ($type == 1) {
+                $labelattribute = Module::t('amosmbilebridge', $model->getAttributeLabel($attribute)) . ' ';
+            } else if ($type == 2) {
+                $labelattribute = $modelUserProfile->getAttributeLabel($attribute) . ' ';
             }
-            else if($type == 2) {
-                $labelattribute = $modelUserProfile->getAttributeLabel($attribute). ' ';
-            }
-            $stringerror[] = $labelattribute . '- '. implode(';', $errs);
+            $stringerror[] = $labelattribute . '- ' . implode(';', $errs);
         }
-        $implode = implode(" \n ",$stringerror);
+        $implode = implode(" \n ", $stringerror);
 
 //        pr($errors);die;
         return $implode;
     }
+
+    /**
+     * @param $id
+     * @return array
+     * @throws \yii\base\InvalidConfigException
+     */
+    public function actionEventChildren($event_id)
+    {
+        /** @var  $model Event */
+        $model = Event::findOne($event_id);
+        $childrens = [];
+        $dates = [];
+        if (!is_null($model) && $model->is_father) {
+            // children
+            $eventsChildren = Event::find()
+                ->andWhere(['event_id' => $model->id])
+                ->andWhere(['is_time_period' => 0])
+                ->andWhere(['status' => Event::EVENTS_WORKFLOW_STATUS_PUBLISHED])
+                ->orderBy('begin_date_hour ASC')->all();
+            foreach ($eventsChildren as $event) {
+                $imageUrl = $event->getMainImageEvent();
+                $url = $imageUrl;
+                if (strpos($imageUrl, 'https') === false) {
+                    $url = Yii::$app->getUrlManager()->createAbsoluteUrl($imageUrl);
+                }
+                $childrens[] = [
+                    'id' => $event->id,
+                    'title' => $event->title,
+                    'description' => $event->description,
+                    'begin_date_hour' => $event->begin_date_hour,
+                    'end_date_hour' => $event->end_date_hour,
+                    'eventImageUrl' => $url ? $url : null,
+                    'urlLanding' => EventsUtility::getUrlLanding($event)
+                ];
+            }
+            //time tables
+
+            $eventsDateArray = Event::find()
+                ->select('event.id, begin_date_hour')
+                ->andWhere(['event_id' => $model->id])
+                ->andWhere(['is_time_period' => 1])
+                ->andWhere(['status' => Event::EVENTS_WORKFLOW_STATUS_PUBLISHED])
+                ->orderBy('begin_date_hour ASC')
+                ->groupBy('event.id, begin_date_hour')->asArray()->all();
+
+            $datesEu = [];
+            foreach ($eventsDateArray as $date) {
+                $explode = explode(' ', $date['begin_date_hour']);
+//                pr($dates, $explode[0]);
+                if (!in_array($explode[0], $datesEu)) {
+                    $beginDate = new \DateTime($explode[0]);
+                    $datesEu[$date['id']] = $beginDate->format('Y-m-d');
+                    $dates[$date['id']] = $beginDate->format('d/m/Y');
+
+                }
+            }
+
+            return [
+                'isOk' => true,
+                'children' => $childrens,
+                'timePeriods' => $dates
+            ];
+        }
+
+        return [
+            'isOk' => false
+        ];
+    }
+
+
+    /**
+     * @param $id
+     * @return array
+     * @throws \yii\base\InvalidConfigException
+     */
+    public function actionPeriodsByDate($id)
+    {
+        $event = Event::findOne($id);
+        if ($event) {
+            $explode = explode(' ', $event->begin_date_hour);
+            $events = Event::find()
+                ->andWhere(['event_id' => $event->event_id])
+                ->andWhere(['is_time_period' => 1])
+                ->andWhere(['status' => Event::EVENTS_WORKFLOW_STATUS_PUBLISHED])
+                ->andWhere(['like', 'begin_date_hour', $explode[0]])->all();
+
+            foreach ($events as $ev) {
+                $url = EventsUtility::getUrlLanding($ev);
+                $beginDate = new \DateTime($ev->begin_date_hour);
+                $endDate = new \DateTime($ev->end_date_hour);
+                $out[] = [
+                    'id' => $ev->id,
+                    'period' => $beginDate->format('H:i') . ' - ' . $endDate->format('H:i')];
+            }
+        }
+        return [
+            'isOk' => true,
+            'data' => $out
+        ];
+    }
+
+    /**
+     * @param $event_id
+     * @param bool $isGuest
+     * @return array
+     * @throws \yii\base\InvalidConfigException
+     */
+    public function actionEventLanding($event_id, $isGuest = false)
+    {
+        $event = Event::findOne($event_id);
+        if ($event) {
+            $eventLanding = $event->eventLanding;
+            if ($eventLanding) {
+                if ($eventLanding->streaming_url) {
+                    $currentTime = new \DateTime('now', new \DateTimeZone("Europe/Rome"));
+                    $isAlwaysVisible = false;
+                    if (empty($eventLanding->date_begin_streaming)) {
+                        $isAlwaysVisible = true;
+                    }
+                    $beginStreamingDate = new \DateTime($eventLanding->date_begin_streaming, new \DateTimeZone("Europe/Rome"));
+
+                    $show = false;
+                    $showcountdown = '';
+                    if ($currentTime >= $beginStreamingDate || $isAlwaysVisible) {
+                        $show = true;
+                        $showcountdown = false;
+                    } else {
+                        $show = false;
+                        $showcountdown = true;
+                    }
+
+
+                    $data = [
+                        'enableStreamingSection' => true,
+                        'showStreaming' => $show,
+                        'showCountdown' => $showcountdown,
+                        'streaming_url' => $this->getFormattedUrlStreaming($eventLanding),
+                        'streaming_type' => $eventLanding->streaming_type,
+                        'date_begin_streaming' => $eventLanding->date_begin_streaming,
+                        'status' => $this->getStatusStreaming($eventLanding, $isGuest)
+                    ];
+
+                } else {
+                    $data = ['enableStreamingSection' => false];
+                }
+
+                return $result = [
+                    'isOk' => true,
+                    'data' => $data
+                ];
+            }
+        }
+        return $result = [
+            'isOk' => false,
+        ];
+    }
+
+
+    /**
+     * @param $eventLanding
+     * @param bool $isGuest
+     * @return string
+     * @throws \yii\base\InvalidConfigException
+     */
+    public function getStatusStreaming($eventLanding, $isGuest = false)
+    {
+        // login_or_register  = a)b) + show_countdown/show_streaming
+        // subscribtion_opened  = c)d) show_countdown/show_streaming
+        // streaming  = e)f) show_countdown/show_streaming
+        // subscribtion_closed  = g)
+
+        // USER IS GUEST
+        if ($isGuest) {
+            $status = 'login_or_register';
+            // USER IS LOGGED
+        } else {
+            // REGISTERED TO EVENT OR INFORMATIVE EVENT
+            if (EventsUtility::isEventParticipant($eventLanding->event_id, \Yii::$app->user->id)
+                || $eventLanding->event->eventType->event_type == EventType::TYPE_INFORMATIVE
+            ) {
+                $status = 'streaming';
+            } else {
+                if ($eventLanding->event->isSubscribtionsOpened()) {
+                    $status = 'subscribtion_opened';
+                } else {
+                    $status = 'subscribtion_closed';
+                }
+
+            }
+
+        }
+        return $status;
+    }
+
+    /**
+     * @param $eventLanding
+     * @return mixed
+     */
+    public function getFormattedUrlStreaming($eventLanding)
+    {
+        switch ($eventLanding->streaming_type) {
+            case EventLanding::STREAMING_TYPE_YOUTUBE:
+                $url = \amos\sitemanagement\models\SiteManagementSliderElem::getUrlEmbedVideoStatic($eventLanding->streaming_url);
+                break;
+            case EventLanding::STREAMING_TYPE_FACEBOOK:
+                $url = $eventLanding->streaming_url;
+                break;
+            case EventLanding::STREAMING_TYPE_MEDIAPORTAL:
+                $url = $eventLanding->getUrlMediaPortalFormatted();
+                break;
+        }
+        return $url;
+    }
+
+
+    /**
+     * @param null $user_id
+     * @return array
+     */
+    public function actionSendOTPEmail($user_id = null)
+    {
+        if (empty($user_id)) {
+            $user_id = \Yii::$app->user->id;
+        }
+        $user = User::findOne($user_id);
+        if ($user) {
+            $ok = $this->sendOtpCode($user);
+            return [
+                'isOk' => $ok
+            ];
+        }
+        return [
+            'isOk' => false
+        ];
+    }
+
+    /**
+     * @param $user
+     * @return boolean
+     */
+    public function sendOtpCode($user)
+    {
+        $subject = AmosAdmin::t('amosadmin', "Modifica indirizzo email per l'utente {nome} {cognome}",
+            [
+                'nome' => $user->userProfile->nome,
+                'cognome' => $user->userProfile->cognome,
+            ]);
+        $text = "<p>" . AmosAdmin::t('amosadmin',
+                "È stato richiesto il cambio dell'indirizzo email per l'utente <strong>{nome}</strong> <strong>{cognome}</strong> iscritto alla piattaforma <strong>{appname}</strong>.",
+                [
+                    'nome' => $user->userProfile->nome,
+                    'cognome' => $user->userProfile->cognome,
+                    'appname' => \Yii::$app->name,
+                ]) . "</p>";
+
+        $ok = \open20\amos\admin\models\UserOtpCode::sendEmailAuthentication($user->email, $subject, $text, $user);
+        return $ok;
+    }
+
+    /**
+     * [
+     *      'user_id' => 120002,
+     *      'action' => 'send-token',
+     *      'email' => 'aaa@bbb.it',
+     *      'auth_code' => '13465767'
+     *
+     * ]
+     * @return array
+     */
+    public function actionModifyEmail()
+    {
+        $post = \Yii::$app->request->post();
+        $user = User::findOne($post['user_id']);
+        $errorString = '';
+        $error = false;
+        $action = !empty($post['action']) ? $post['action'] : '';
+        $code = !empty($post['auth_code']) ? $post['auth_code'] : null;
+
+        if ($user) {
+            $oldEmail = $user->email;
+            $user->email = $post['email'];
+            if ($oldEmail == $user->email) {
+                $errorString = AmosAdmin::t('amosadmin', "L'email inserita deve essere diversa dalla precedente.");
+                $error = true;
+            }
+
+
+            if (!$error) {
+                if ($post['action'] == 'send-token') {
+                    $action = 'send-token';
+                    $ok = $this->sendOtpCode($user);
+                    if (!$ok) {
+                        $errorString = AmosAdmin::t('amosadmin', "Errore nell'invio del codice OTP");
+                    }
+                } else {
+                    $action = 'save-email';
+                    if (UserOtpCode::isValidCodice($code, UserOtpCode::TYPE_AUTH_EMAIL, $user->id)) {
+                        if (!UserOtpCode::isExpired($code, UserOtpCode::TYPE_AUTH_EMAIL, $user->id)) {
+                            if ($user->validate('email')) {
+                                $user->save(false);
+                            }
+                        } else {
+                            $errorString = AmosAdmin::t('amosadmin', 'Expired code');
+                            $error = true;
+
+                        }
+                    } else {
+                        $errorString = AmosAdmin::t('amosadmin', 'Il codice OTP inserito non è valido, inserire quello corretto oppure richiederne uno nuovo');
+                        $error = true;
+                    }
+                }
+            }
+        }
+
+        $result = [
+            'isOk' => !$error,
+            'action' => $action,
+            'error' => $errorString,
+        ];
+
+        return $result;
+
+    }
+
+    /**
+     * @param null $offset
+     * @param null $limit
+     * @param null $from_date
+     * @param null $to_date
+     * @param null $text
+     * @param null $category
+     * @param string $order
+     * @return array
+     */
+    public function actionHighlightedEvents(
+        $offset = null, $limit = null, $from_date = null, $to_date = null, $text = null, $category = null, $order = 'ASC')
+    {
+
+        return $this->actionEventsList($offset, $limit, $from_date, $to_date, $text, $category, $order, true);
+    }
+
 
 }
