@@ -60,7 +60,9 @@ class SondaggiParser {
             ];
 
             //Remove id as is not needed
-            unset($newItem['fields']['id']);
+           if(isset($newItem['fields']['id'])){
+                unset($newItem['fields']['id']);
+            }
 
             //Can edit
             $newItem['canEdit'] = Yii::$app->user->can($editPremission, ['model' => $item]);

@@ -24,6 +24,7 @@ use yii\db\ActiveQuery;
 use yii\db\ActiveRecord;
 use yii\rest\Controller;
 use paragraph1\phpFCM\Recipient\Device;
+use Yii;
 
 class NotificationController extends Controller
 {
@@ -51,7 +52,7 @@ class NotificationController extends Controller
                         $this->sendNotificationByType('comment', $event->sender);
                     }
             }
-        } catch (Exception $ex) {
+        } catch (\Exception $ex) {
             Yii::getLogger()->log($ex->getMessage(), \yii\log\Logger::LEVEL_ERROR);
         }
 

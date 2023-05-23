@@ -23,7 +23,6 @@ return [
     'Unable to store image file, try again' => 'Impossibile salvare l\'immagine dell\'utente, procedura annullata',
     'Unable to import the user avatar' => 'Impossibile importare avatar utente',
     'Unable to Link The Social Profile' => 'Impossibile collegare profilo Social',
-    'Invalid Social Profile, Try again' => 'Profilo social errato, riprovare',
     'Please LogIn to your account First' => 'Devi prima loggarti',
     'Social Linking Disabled' => 'Collegamento profili social disabilitato',
     'Social Profile Already Connected' => 'Profilo social già collegato',

@@ -9,7 +9,7 @@ use yii\filters\auth\HttpBearerAuth;
 use yii\filters\VerbFilter;
 use yii\helpers\ArrayHelper;
 use yii\httpclient\Exception;
-use yii\swiftmailer\Logger;
+use yii\log\Logger;
 
 class ShareController extends DefaultController
 {

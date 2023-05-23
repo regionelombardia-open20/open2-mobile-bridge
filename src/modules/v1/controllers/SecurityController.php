@@ -24,7 +24,7 @@ use yii\filters\auth\CompositeAuth;
 use yii\filters\auth\HttpBearerAuth;
 use yii\helpers\ArrayHelper;
 use yii\rest\Controller;
-use yii\swiftmailer\Logger;
+use yii\log\Logger;
 
 class SecurityController extends DefaultController
 {

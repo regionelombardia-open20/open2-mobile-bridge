@@ -199,6 +199,8 @@ class ItemsParser
 
         //Read permission name
         $readPremission = strtoupper($baseClassName . '_READ');
+        
+        $editPremission = strtoupper($baseClassName . '_UPDATE');
 
         //Return item if user can view
         if($model && \Yii::$app->user->can($readPremission, ['model' => $model])) {
@@ -218,7 +220,9 @@ class ItemsParser
                 $newItem['fields'] = $model->toArray();
 
                 //Remove id as is not needed
-                unset($newItem['fields']['id']);
+                if(isset($newItem['fields']['id'])){
+                    unset($newItem['fields']['id']);
+                }
 
                 //Can edit
                 $newItem['canEdit'] = \Yii::$app->user->can($editPremission, ['model' => $model]);

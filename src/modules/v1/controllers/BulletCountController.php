@@ -14,7 +14,7 @@ use yii\filters\VerbFilter;
 use yii\helpers\ArrayHelper;
 use yii\httpclient\Exception;
 use yii\rest\Controller;
-use yii\swiftmailer\Logger;
+use yii\log\Logger;
 
 class BulletCountController extends DefaultController
 {
