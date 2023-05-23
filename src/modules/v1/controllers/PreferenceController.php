@@ -470,6 +470,13 @@ class PreferenceController extends DefaultController
             throw new InvalidArgumentException('Utente obbligatorio');
         }
 
+        // Utente corrente loggato
+        $userId = \Yii::$app->user->id;
+        $userProfile = \backend\modules\pcadmin\models\UserProfile::findOne(['user_id' => $userId]);
+
+        // Tag selezionati dall'utente corrente
+        $userTags = $userProfile->getUserTags(PreferenceChannel::APP_ID);
+
         /** @var ActiveQuery $query */
         $query = CampainsQueryUtility::getQueryBaseForCampainsChannels();
         $query->andWhere(['user.id' => $userId]);
@@ -507,8 +514,9 @@ class PreferenceController extends DefaultController
         /** @var PreferenceCampainChannelMm $campainChannel */
         foreach ($listOfComunications as $campainChannel) {
             // VarDumper::dump( ArrayHelper::map($campainChannel->preferenceCampain->getPreferenceCampainTagMms(),'tag_id', 'tag_id'), 3, $highlight = true);
-            $listOfCampainTargets = $this->getListOfTagByIds(ArrayHelper::map($campainChannel->preferenceCampain->preferenceCampainTagMms,'tag_id', 'tag_id'), true);
-            $listOfCampainItems = $this->getListOfTagByIds(ArrayHelper::map($campainChannel->preferenceCampain->preferenceCampainTagMms,'tag_id', 'tag_id'));
+            // Lista tag contenuti con nuove logiche (MEV 68-2022, Segmentazione e invio campagne contenuti multitematici)
+            $listOfCampainTargets = $this->getListOfTagByIds(array_intersect($userTags, ArrayHelper::map($campainChannel->preferenceCampainChannelMmTagMms,'tag_id', 'tag_id')), true);
+            $listOfCampainItems = $this->getListOfTagByIds(array_intersect($userTags, ArrayHelper::map($campainChannel->preferenceCampainChannelMmTagMms,'tag_id', 'tag_id')));
 
             $listOfCampainTargetsIds = $this->listOfTagToArray($listOfCampainTargets);
             $listOfCampainItemsIds = $this->listOfTagToArray($listOfCampainItems);
@@ -570,7 +578,7 @@ class PreferenceController extends DefaultController
                 $toret[$campainChannel->id]['title'] = $campainChannel->title;
                 $toret[$campainChannel->id]['topics'] = $listOfCampainItemsIds;
                 $toret[$campainChannel->id]['targets'] = $listOfCampainTargetsIds;
-                $toret[$campainChannel->id]['contents_number'] = $this->getNumberOfContentByCampainChannel($campainChannel);
+                $toret[$campainChannel->id]['contents_number'] = $this->getNumberOfContentByCampainChannelAndUserTags($campainChannel, $userTags);
             }
 
         }
@@ -587,12 +595,23 @@ class PreferenceController extends DefaultController
     {
         \Yii::$app->response->format = \yii\web\Response::FORMAT_JSON;
 
+        if(\Yii::$app->user->id === null) {
+            throw new ForbiddenHttpException('Not allowed call');
+        }
+        // Utente corrente loggato
+        $userId = \Yii::$app->user->id;
+        $userProfile = \backend\modules\pcadmin\models\UserProfile::findOne(['user_id' => $userId]);
+
+        // Tag selezionati dall'utente corrente
+        $userTags = $userProfile->getUserTags(PreferenceChannel::APP_ID);
+
         $channelMm = PreferenceCampainChannelMm::findOne(['id' => $comunicationId]);
         $toret = [];
 
         if (!empty($channelMm)) {
-            $listItems = $this->getListOfTagByIds(ArrayHelper::map($channelMm->preferenceCampain->preferenceCampainTagMms,'tag_id', 'tag_id'));
-            $listChannels = $this->getListOfTagByIds(ArrayHelper::map($channelMm->preferenceCampain->preferenceCampainTagMms,'tag_id', 'tag_id'), true);
+            // Lista tag contenuti con nuove logiche (MEV 68-2022, Segmentazione e invio campagne contenuti multitematici)
+            $listItems = $this->getListOfTagByIds(array_intersect($userTags, ArrayHelper::map($channelMm->preferenceCampainChannelMmTagMms,'tag_id', 'tag_id')));
+            $listChannels = $this->getListOfTagByIds(array_intersect($userTags, ArrayHelper::map($channelMm->preferenceCampainChannelMmTagMms,'tag_id', 'tag_id')), true);
 
             $containers = PreferenceCampainContainer::find()->joinWith('preferenceCampainSection', true, 'INNER JOIN')->andWhere(['preference_campain_channel_mm_id' => $comunicationId])->all();
             $toret = [
@@ -606,17 +625,23 @@ class PreferenceController extends DefaultController
                 // VarDumper::dump( count($containers), $depth = 10, $highlight = false);
                 /** @var PreferenceCampainContainer $container */
                 foreach ($containers as $container) {
-                    $toret['contents'][$container->id]['id'] = $container->id;
-                    $toret['contents'][$container->id]['title'] = $container->content_title;
-                    $toret['contents'][$container->id]['description'] = $container->content_text;
-                    $toret['contents'][$container->id]['news_url'] = $container->getContentLink();                    
-                    $toret['contents'][$container->id]['image_url'] = (!empty($container->contentImage))? $container->contentImage->getWebUrl(): null;
+                    // Verifica che la lista dei tag selezionati dall'utente sia presente tra i tag del contenuto/container (con una intersezione di array)
+                    // Se il risultato dell'intersezione contiene almeno 1 elemento, il contenuto e' da visualizzare
+                    $displayContainer = (count(array_intersect($userTags, ArrayHelper::map($container->preferenceCampainContainerTagMms, 'tag_id', 'tag_id'))) > 0);
 
-                    if (!empty($container->preferenceEvento)) {
-                        $event = $container->preferenceEvento;
-                        $toret['contents'][$container->id]['event_location'] = $event->location . (!empty($event->location_entrance)? (' - ' . $event->location_entrance): '');
-                        $toret['contents'][$container->id]['event_start_datetime'] = $event->date_start;
-                        $toret['contents'][$container->id]['event_end_datetime'] = $event->date_end;
+                    if($displayContainer) {
+                        $toret['contents'][$container->id]['id'] = $container->id;
+                        $toret['contents'][$container->id]['title'] = $container->content_title;
+                        $toret['contents'][$container->id]['description'] = $container->content_text;
+                        $toret['contents'][$container->id]['news_url'] = $container->getContentLink();
+                        $toret['contents'][$container->id]['image_url'] = (!empty($container->contentImage))? $container->contentImage->getWebUrl(): null;
+
+                        if (!empty($container->preferenceEvento)) {
+                            $event = $container->preferenceEvento;
+                            $toret['contents'][$container->id]['event_location'] = $event->location . (!empty($event->location_entrance)? (' - ' . $event->location_entrance): '');
+                            $toret['contents'][$container->id]['event_start_datetime'] = $event->date_start;
+                            $toret['contents'][$container->id]['event_end_datetime'] = $event->date_end;
+                        }
                     }
                 }
             }
@@ -914,6 +939,13 @@ class PreferenceController extends DefaultController
 
         $this->checkUserSecurity($userId);
 
+        // Utente corrente loggato
+        $userId = \Yii::$app->user->id;
+        $userProfile = \backend\modules\pcadmin\models\UserProfile::findOne(['user_id' => $userId]);
+
+        // Tag selezionati dall'utente corrente
+        $userTags = $userProfile->getUserTags(PreferenceChannel::APP_ID);
+
         $notify = Yii::$app->getModule('notify');
         $toret = [
             'status' => null,
@@ -937,15 +969,15 @@ class PreferenceController extends DefaultController
 
                     /** @var PreferenceCampainChannelMm $campainChannel */
                     foreach ($listOfComunications as $campainChannel) {
-                        $listItems = $this->getListOfTagByIds(ArrayHelper::map($campainChannel->preferenceCampain->preferenceCampainTagMms,'tag_id', 'tag_id'));
-                        $listChannels = $this->getListOfTagByIds(ArrayHelper::map($campainChannel->preferenceCampain->preferenceCampainTagMms,'tag_id', 'tag_id'), true);
+                        $listItems = $this->getListOfTagByIds(array_intersect($userTags, ArrayHelper::map($campainChannel->preferenceCampain->preferenceCampainTagMms,'tag_id', 'tag_id')));
+                        $listChannels = $this->getListOfTagByIds(array_intersect($userTags, ArrayHelper::map($campainChannel->preferenceCampain->preferenceCampainTagMms,'tag_id', 'tag_id')), true);
             
                         $toret['data'][$campainChannel->id]['id'] = $campainChannel->id;
                         $toret['data'][$campainChannel->id]['date'] = $campainChannel->date_app;
                         $toret['data'][$campainChannel->id]['title'] = $campainChannel->title;
                         $toret['data'][$campainChannel->id]['topics'] = $this->listOfTagToArray($listItems);
                         $toret['data'][$campainChannel->id]['targets'] = $this->listOfTagToArray($listChannels);
-                        $toret['data'][$campainChannel->id]['contents_number'] = $this->getNumberOfContentByCampainChannel($campainChannel);
+                        $toret['data'][$campainChannel->id]['contents_number'] = $this->getNumberOfContentByCampainChannelAndUserTags($campainChannel, $userTags);
                     }
                     $toret['status'] = 'ok';
 
@@ -1058,6 +1090,20 @@ class PreferenceController extends DefaultController
         $count = 0;
         foreach ($campainChannel->preferenceCampainSections as $section) {
             $count = $count + intval(PreferenceCampainContainer::find()->andWhere(['preference_campain_section_id' => $section->id])->count());
+        }
+        return $count;
+    }
+
+    private function getNumberOfContentByCampainChannelAndUserTags($campainChannel, $userTags)
+    {
+        $count = 0;
+        foreach ($campainChannel->preferenceCampainSections as $section) {
+            foreach($section->preferenceCampainContainers as $container) {
+                $containerTags = ArrayHelper::map($container->preferenceCampainContainerTagMms, 'tag_id', 'tag_id');
+                if(count(array_intersect($containerTags, $userTags)) > 0) {
+                    $count++;
+                }
+            }
         }
         return $count;
     }
