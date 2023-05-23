@@ -19,6 +19,7 @@ use open20\amos\comuni\models\IstatComuni;
 use open20\amos\comuni\models\IstatNazioni;
 use open20\amos\comuni\models\IstatProvince;
 use open20\amos\core\models\ModelsClassname;
+use open20\amos\core\record\CachedActiveQuery;
 use open20\amos\core\user\User;
 use open20\amos\events\AmosEvents;
 use open20\amos\events\models\EventInvitation;
@@ -31,6 +32,7 @@ use open20\amos\events\models\EventType;
 use open20\amos\events\utility\EventsUtility;
 use open20\amos\mobile\bridge\models\RegisterUserEventsAria;
 use open20\amos\mobile\bridge\Module;
+use open20\amos\mobile\bridge\modules\v1\utility\EventUtility;
 use open20\amos\notificationmanager\models\NotificationConf;
 use open20\amos\tag\models\EntitysTagsMm;
 use open20\amos\tag\models\Tag;
@@ -53,7 +55,7 @@ class EventsAriaController extends DefaultController
     {
         $behaviours = parent::behaviors();
 
-        return ArrayHelper::merge($behaviours,
+        $behaviours = ArrayHelper::merge($behaviours,
             [
                 'verbFilter' => [
                     'class' => VerbFilter::className(),
@@ -82,6 +84,10 @@ class EventsAriaController extends DefaultController
                     ],
                 ],
             ]);
+
+        $behaviours['pageCache'] = EventUtility::mobileCacheConfigs();
+        return $behaviours;
+
     }
 
     /**
@@ -185,7 +191,9 @@ class EventsAriaController extends DefaultController
                 $query->orderBy(['begin_date_hour' => $order == 'ASC' ? SORT_ASC : SORT_DESC]);
             }
 
-            $listModel = $query->all();
+            $cachedQuery = CachedActiveQuery::instance($query);
+            $cachedQuery->cache();
+            $listModel = $cachedQuery->all();
             foreach ($listModel as $event) {
                 $the_event = $this->parseEvent($event);
                 $list[] = $the_event;
@@ -423,6 +431,7 @@ class EventsAriaController extends DefaultController
             $query = Event::find();
             $query->andWhere(['publish_on_prl' => 1]);
             $query->andWhere(['event_id' => $event->id]);
+            $query->andWhere(['event.status' => Event::EVENTS_WORKFLOW_STATUS_PUBLISHED]);
             $order = 'ASC';
 
             $query->orderBy(['begin_date_hour' => $order == 'ASC' ? SORT_ASC : SORT_DESC]);
@@ -800,7 +809,7 @@ class EventsAriaController extends DefaultController
      * [country] => 97
      * [city] => 97002
      * [telefon] => 235425
-     * [fiscal_code] => LFRMHL90A20D423Z
+     * [fiscal_code] => CODICE_FISCALE
      * [company] => XCVVXC
      * [privacy] => 1
      * [privacy_2] => 1

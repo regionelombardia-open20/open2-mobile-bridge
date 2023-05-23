@@ -12,13 +12,16 @@ namespace open20\amos\mobile\bridge\modules\v1\actions\entitydata\parsers;
 
 use open20\amos\admin\models\UserProfile;
 use open20\amos\core\models\ContentShared;
+use open20\amos\events\models\Event;
 use open20\amos\news\models\base\News as News2;
 use open20\amos\news\models\News;
 use open20\amos\news\models\search\NewsSearch;
+use open20\amos\tag\models\Tag;
 use Yii;
+use yii\db\Expression;
 use yii\helpers\StringHelper;
 
-class NewsParser extends BaseParser
+class PoiNewsParser extends NewsParser
 {
 
     /**
@@ -27,7 +30,7 @@ class NewsParser extends BaseParser
      * @param $bodyParams
      * @return array
      */
-    public static function getItems($namespace, $bodyParams)
+    public static function getItemsForPreference($namespace, $bodyParams)
     {
         //Paginated offset
         $offset = $bodyParams['offset'] - 1;
@@ -39,7 +42,10 @@ class NewsParser extends BaseParser
         $newsSearch = new NewsSearch();
 
         //Use search data provider
-        $dataProvider = $newsSearch->searchOwnInterest([]);
+        $dataProvider = $newsSearch->searchAll([]);
+        $dataProvider->query
+            ->andWhere(['>=', 'data_pubblicazione', new Expression("DATE_SUB(NOW(), INTERVAL 2 MONTH)")])
+            ->andWhere(['primo_piano' => 1]);
 
         //Set Limit and offsets
         $dataProvider->pagination->setPageSize($limit);
@@ -52,7 +58,7 @@ class NewsParser extends BaseParser
         $itemsArray = [];
 
         foreach ($items as $item) {
-            $newItem = self::parseItem($item);
+            $newItem = self::parseItemForPrefrence($item);
 
             if (!empty($newItem)) {
                 //Insert New Item
@@ -63,40 +69,19 @@ class NewsParser extends BaseParser
         return $itemsArray;
     }
 
-    /**
-     * Obtain a single news
-     * @param $bodyParams
-     * @return array
-     */
-    public static function getItem($bodyParams)
-    {
-        //Id of the record
-        $identifier = $bodyParams['id'];
-
-        //Fetch news and parse it
-        $item = News::findOne($identifier);
-
-        //Resulting array of items
-        $itemsArray = [];
-
-        return [self::parseItem($item)];
-    }
 
     /**
      * Parse single news and return an api designed array
      * @param $item
      * @return array
      */
-    public static function parseItem($item)
+    public static function parseItemForPrefrence($item)
     {
         //The base class name
         $baseClassName = StringHelper::basename(News2::className());
 
         //Read permission name
         $readPremission = strtoupper($baseClassName . '_READ');
-
-        //Edit permission name
-        $editPremission = strtoupper($baseClassName . '_UPDATE');
 
         //Can user view element
         $canView = Yii::$app->user->can($readPremission, ['model' => $item]);
@@ -117,39 +102,41 @@ class NewsParser extends BaseParser
             //Image
             $image = $item->newsImage;
 
+            //main category
+            $nameMainCategory = '';
+            $newsCategory = $item->newsCategorie;
+            if ($newsCategory) {
+                $nameMainCategory = $newsCategory->titolo;
+            }
+            //other categories
+            $stringOtherCategories = '';
+            $otherCategories = $item->otherNewsCategories;
+            $otherCategoriesNames = [];
+            foreach ($otherCategories as $category) {
+                $otherCategoriesNames[] = $category->titolo;
+            }
+            if (!empty($otherCategoriesNames)) {
+                $stringOtherCategories = implode(', ', $otherCategoriesNames);
+            }
+            $item->usePrettyUrl = true;
+
             //Fill fields from item usable in app
             $newItem['fields'] = [
-                'slug' => $item->slug,
                 'titolo' => self::flushHtml($item->titolo),
                 'sottotitolo' => self::flushHtml($item->sottotitolo),
                 'descrizione_breve' => self::flushHtml($item->descrizione_breve),
                 'descrizione' => self::flushHtml($item->descrizione),
                 'data_pubblicazione' => $item->data_pubblicazione,
-                'created_at' => $item->created_at,
-                'created_by' => $item->created_by,
-                'comments_enabled' => $item->comments_enabled,
-                'owner' => [
-                    'nome' => $owner->nome,
-                    'cognome' => $owner->cognome,
-                    'presentazione_breve' => $owner->presentazione_breve,
-                    'avatarUrl' => $owner->avatarWebUrl,
-                ],
+                'highlights' => $item->in_evidenza,
+                'main_category' => $nameMainCategory,
+                'other_categories' => $stringOtherCategories,
+                'tags' => self::getTags($item),
                 'newsImageUrl' => $image ? Yii::$app->getUrlManager()->createAbsoluteUrl($image->getWebUrl()) : null,
+                'detailUrl' => Yii::$app->getUrlManager()->createAbsoluteUrl($item->getFullViewUrl()),
             ];
-            $url = '';
-            if (self::isContentShared($item)) {
-                $view_url = $item->getViewUrl();
-                $url = substr($view_url, 0, strrpos($view_url, "/")) . '/public' . "?id=" . $item->id;
-            }
-            $newItem['shareUrl'] = $url;
-            $newItem['likeMe'] = self::isLikeMe($item);
-            $newItem['countLikeMe'] = self::getCountLike($item);
+
             //Remove id as is not needed
             unset($newItem['fields']['id']);
-
-            //Can edit
-            $newItem['canEdit'] = Yii::$app->user->can($editPremission, ['model' => $item]);
-
             return $newItem;
         }
 
@@ -157,24 +144,20 @@ class NewsParser extends BaseParser
     }
 
     /**
-     *
-     * @param type $model
-     * @return boolean
+     * @param $news
+     * @return array
      */
-    public static function isContentShared($model)
+    public static function getTags($news)
     {
-        $obj = $model;
-        if ($obj) {
-            $classname = get_class($obj);
-            $contentShared = ContentShared::find()
-                ->innerJoinWith('modelsClassname')
-                ->andWhere(['classname' => $classname, 'content_id' => $obj->id])->one();
-
-            if ($contentShared) {
-                return true;
-            }
+        $preferenceTags = [];
+        $tags = Tag::find()
+            ->innerJoin('entitys_tags_mm', 'entitys_tags_mm.tag_id = tag.id')
+            ->andWhere(['record_id' => $news->id])
+            ->all();
+        foreach ($tags as $tag) {
+            $preferenceTags [] = ['id' => $tag->id, 'name' => $tag->nome, 'codice' => $tag->codice];
         }
-
-        return false;
+        return $preferenceTags;
     }
+
 }

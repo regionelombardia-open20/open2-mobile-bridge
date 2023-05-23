@@ -12,6 +12,7 @@ use open20\amos\events\models\EventInvitation;
 use open20\amos\events\models\EventParticipantCompanion;
 use open20\amos\events\models\search\EventSearch;
 use open20\amos\events\utility\EventsUtility;
+use open20\amos\mobile\bridge\modules\v1\utility\EventUtility;
 use open20\amos\news\models\News;
 use open20\amos\sondaggi\models\search\SondaggiSearch;
 use open20\amos\tag\models\Tag;
@@ -27,7 +28,7 @@ use yii\helpers\Url;
 use yii\log\Logger;
 use yii\rest\Controller;
 
-class EventPoiController extends EventApiBaseController
+class EventGiovaniController extends EventApiBaseController
 {
 
     /**
@@ -37,7 +38,7 @@ class EventPoiController extends EventApiBaseController
     {
         $behaviours = parent::behaviors();
 
-        return ArrayHelper::merge($behaviours,
+        $behaviours = ArrayHelper::merge($behaviours,
             [
                 'verbFilter' => [
                     'class' => VerbFilter::className(),
@@ -46,18 +47,20 @@ class EventPoiController extends EventApiBaseController
                     ],
                 ],
             ]);
+        $behaviours['pageCache'] = EventUtility::mobileCacheConfigs();
+        return $behaviours;
     }
 
     /**
      * @param null $pageSize
      * @param null $pageNumber
-     * @param int $poi_category
+     * @param int $category
      * @param null $title
      * @param null $dateFrom
      * @param null $dateTo
      * @return array
      */
-    public function actionEventsList($pageSize = null, $pageNumber = null, $poi_category = 0, $title = null, $dateFrom = null, $dateTo = null)
+    public function actionEventsList($pageSize = null, $pageNumber = null, $category = 0, $title = null, $dateFrom = null, $dateTo = null)
     {
         $list = [];
 //        try {
@@ -66,12 +69,12 @@ class EventPoiController extends EventApiBaseController
         $dataProvider = EventApiBaseController::getBaseEventsList()['dataProvider'];
         $query = EventApiBaseController::getBaseEventsList()['query'];
 
-        // Search only events to publish on POI
-        $query->andWhere(['publish_on_poi' => 1]);
+        // Search only events to publish on Giovani Platform
+        $query->andWhere(['publish_on_portale_giovani' => 1]);
 
-        // Poi category
-        if ($poi_category != 0) {
-            $query->andWhere(['poi_category' => $poi_category]);
+        // Category
+        if ($category != 0) {
+            $query->andWhere(['portale_giovani_category' => $category]);
         }
 
         // Title
@@ -123,9 +126,9 @@ class EventPoiController extends EventApiBaseController
         foreach ($listModel as $model) {
             $item = EventApiBaseController::baseParseItem($model);
             // Add poi_category field
-            $item['fields']['poi_category'] = [
-                'id' => $model->poi_category,
-                'label' => Event::getPoiCategoryLabel()[$model->poi_category]
+            $item['fields']['portale_giovani_category'] = [
+                'id' => $model->portale_giovani_category,
+                'label' => Event::getGiovaniPlatformCategoryLabel()[$model->portale_giovani_category]
             ];
 
             $list[] = $item;

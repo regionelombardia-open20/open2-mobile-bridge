@@ -25,7 +25,7 @@ class AccessTokens extends \open20\amos\mobile\bridge\modules\v1\models\base\Acc
     public function logout()
     {
         $this->logout_at = new Expression('NOW()');
-        $this->logout_by = UserHelper::get()->getId();
+        $this->logout_by = \Yii::$app->user->id;
         $this->save(false);
     }
 

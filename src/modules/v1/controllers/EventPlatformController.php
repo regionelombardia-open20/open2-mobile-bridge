@@ -4,12 +4,15 @@ namespace open20\amos\mobile\bridge\modules\v1\controllers;
 
 use open20\amos\admin\models\UserProfile;
 use open20\amos\admin\utility\UserProfileMailUtility;
+use open20\amos\core\record\CachedActiveQuery;
+use open20\amos\core\response\Response;
 use open20\amos\discussioni\models\DiscussioniTopic;
 use open20\amos\documenti\models\Documenti;
 use open20\amos\events\AmosEvents;
 use open20\amos\events\models\Event;
 use open20\amos\events\models\EventInvitation;
 use open20\amos\events\models\EventParticipantCompanion;
+use open20\amos\events\models\EventPushNotification;
 use open20\amos\events\models\search\EventSearch;
 use open20\amos\events\utility\EventsUtility;
 use open20\amos\mobile\bridge\modules\v1\actions\entitydata\parsers\DiscussioniParser;
@@ -24,15 +27,20 @@ use open20\amos\sondaggi\models\search\SondaggiSearch;
 use open20\amos\tag\models\Tag;
 use Exception;
 use kartik\mpdf\Pdf;
+use luya\web\filters\ResponseCache;
 use Yii;
+use yii\data\ActiveDataProvider;
+use yii\db\ActiveQuery;
 use yii\db\Expression;
 use yii\filters\auth\CompositeAuth;
 use yii\filters\auth\HttpBearerAuth;
 use yii\filters\VerbFilter;
 use yii\helpers\ArrayHelper;
+use yii\helpers\Json;
 use yii\helpers\Url;
 use yii\log\Logger;
 use yii\rest\Controller;
+use common\models\AppVersion;
 
 class EventPlatformController extends DefaultController
 {
@@ -44,12 +52,15 @@ class EventPlatformController extends DefaultController
     {
         $behaviours = parent::behaviors();
 
-        return ArrayHelper::merge($behaviours,
+        $behaviours =  ArrayHelper::merge($behaviours,
             [
                 'verbFilter' => [
                     'class' => VerbFilter::className(),
                     'actions' => [
                         'events-list' => ['get'],
+                        'general-elastic-search' => ['get'],
+                        'events-list-home' => ['get'],
+                        'my-events' => ['get'],
                         'event-detail' => ['get'],
                         'event-news-list' => ['get'],
                         'event-discussions-list' => ['get'],
@@ -61,9 +72,16 @@ class EventPlatformController extends DefaultController
                         'event-has-ticket' => ['get'],
                         'event-changes' => ['get'],
                         'delete-account' => ['get'],
+                        'history-push-notification' => ['get'],
+                        'get-last-app-version' => ['get'],
                     ],
                 ],
             ]);
+
+
+        $behaviours['pageCache'] = EventUtility::mobileCacheConfigs();
+
+        return $behaviours;
     }
 
     public function beforeAction($action)
@@ -76,6 +94,110 @@ class EventPlatformController extends DefaultController
 
         return parent::beforeAction($action);
 
+    }
+
+    public function actionGeneralElasticSearch($searchtext, $pageSize = null, $pageNumber = 0)
+    {
+        $modelSearch = new \common\modules\elasticsearch\ElasticModelSearch();
+        $dataProvider = $modelSearch->cmsSearch(
+            [
+                'searchtext' => $searchtext,
+                "withPagination" => 1
+            ], intval($pageSize));
+
+        // Add pagination to dataProvider
+        if (is_null($pageSize)) {
+            $dataProvider->pagination = false;
+        } else {
+            $dataProvider->pagination->pageSize = $pageSize;
+            $dataProvider->pagination->page = $pageNumber;
+        }
+
+        $listModel = $dataProvider->getModels();
+        foreach ($listModel as $model) {
+            $event = Event::findOne($model['id']);
+            if($event) {
+                $list[] = EventPlatformParser::parseItem($event);
+            }
+        }
+
+
+
+        // Api Pagination
+        $totalRowCount = $dataProvider->totalCount;
+        return [
+            'totalRowCount' => intval($totalRowCount),
+            'pageSize' => intval($pageSize),
+            'pageNumber' => intval($pageNumber),
+            'list' => $list
+        ];
+    }
+
+    /**
+     * @param $pageSize
+     * @param $pageNumber
+     * @return array
+     */
+    public function actionMyEvents($pageSize = null, $pageNumber = 0, $user_id = null){
+
+        $search = new EventSearch();
+
+        /** @var  $dataProvider ActiveDataProvider */
+        $dataProvider = $search->searchMyRegistrations(['user_id' => $user_id], $pageSize);
+        return $this->paginationSearch($dataProvider, $pageSize, $pageNumber);
+    }
+
+
+
+    /**
+     * @param $pageSize
+     * @param $pageNumber
+     * @param $filterDate
+     * @param $filterTag
+     * @return array
+     */
+    public function actionEventsListHome($pageSize = null, $pageNumber = 0, $filterDate = null, $filterTag = null)
+    {
+        $params = [];
+        $search = new EventSearch();
+        $params['day'] = $filterDate;
+        $params['tag_id'] = $filterTag;
+
+        /** @var  $dataProvider ActiveDataProvider */
+        $dataProvider = $search->cmsPublishedSearch($params, $pageSize);
+
+        return $this->paginationSearch($dataProvider, $pageSize, $pageNumber);
+    }
+
+    /**
+     * @param $dataProvider
+     * @param $pageSize
+     * @param $pageNumber
+     * @return array
+     */
+    public function paginationSearch($dataProvider, $pageSize,$pageNumber){
+        $list = [];
+        // Add pagination to dataProvider
+        if (is_null($pageSize)) {
+            $dataProvider->pagination = false;
+        } else {
+            $dataProvider->pagination->pageSize = $pageSize;
+            $dataProvider->pagination->page = $pageNumber;
+        }
+
+        // Api Pagination
+        $totalRowCount = $dataProvider->totalCount;
+        $listModel = $dataProvider->getModels();
+
+        foreach ($listModel as $model) {
+            $list[] = EventPlatformParser::parseItem($model);
+        }
+        return [
+            'totalRowCount' => intval($totalRowCount),
+            'pageSize' => intval($pageSize),
+            'pageNumber' => intval($pageNumber),
+            'list' => $list
+        ];
     }
 
     /**
@@ -178,7 +300,7 @@ class EventPlatformController extends DefaultController
         $ditail = [];
 
         try {
-            $ditail = EventPlatformParser::parseItem(Event::findOne(['id' => $event_id]));
+            $ditail = EventPlatformParser::parseItem(Event::findOne(['id' => $event_id]), true);
         } catch (Exception $ex) {
             Yii::getLogger()->log($ex->getMessage(), Logger::LEVEL_ERROR);
         }
@@ -535,8 +657,8 @@ class EventPlatformController extends DefaultController
         if (empty($user_id)) {
             $user_id = \Yii::$app->user->id;
         }
-        $userProfile = UserProfile::find()->andWhere(['user_id'=> $user_id])->one();
-        if($userProfile){
+        $userProfile = UserProfile::find()->andWhere(['user_id' => $user_id])->one();
+        if ($userProfile) {
             $ok = UserProfileMailUtility::sendEmailDropAccountRequest($userProfile);
             return [
                 'isOk' => $ok
@@ -549,4 +671,122 @@ class EventPlatformController extends DefaultController
 
     }
 
+    public function actionHistoryPushNotification($user_id = null)
+    {
+        $history = [];
+        if (empty($user_id)) {
+            $user_id = \Yii::$app->user->id;
+        }
+        $pushNotificationsSent = \open20\amos\events\models\EventPushNotificationSent::find()
+            ->andWhere(['user_id' => $user_id])
+            ->groupBy('event_push_notification_id')
+            ->orderBy('event_push_notification_sent.created_at DESC')
+            ->limit(10)
+            ->all();
+
+        /** @var  $pushSent */
+        foreach ($pushNotificationsSent as $pushSent) {
+            $notificationPush = $pushSent->eventPushNotification;
+            if ($notificationPush) {
+//                print_r($notificationPush->attributes);
+                $event = $notificationPush->event;
+                $class = $notificationPush->content_class;
+                $id = $notificationPush->content_id;
+                $object = $class::findOne($id);
+
+                if ($event && $object) {
+//                    print_r("--------");
+//                    print_r($event->id."-".$class);
+//                    print_r('-'.$object->id);
+//                    print_r("--------");
+
+                    $texts = $this->getTexts($notificationPush, $event, $object);
+                    $history[] = [
+                        'title' => $texts['title'],
+                        'text' => $texts['text'],
+                        'date' => $notificationPush->created_at,
+                        'event_id' => $event->id
+                    ];
+                }
+            }
+        }
+        return $history;
+    }
+
+    /**
+     * @param $push
+     * @param $event
+     * @param $object
+     * @return array
+     */
+    public function getTexts($push, $event, $object)
+    {
+        $typesOfNotification = [EventPushNotification::TYPE_SAVE_THE_DATE, EventPushNotification::TYPE_INVITE_REGISTER];
+        if (in_array($push->type, $typesOfNotification)) {
+            if ($push->type == EventPushNotification::TYPE_SAVE_THE_DATE) {
+                $title = AmosEvents::t('amosevents', $push->getTitlePushNotification());
+                $text = AmosEvents::t('amosevents', $push->getTextPushNotification(), [
+                    'title' => $event->title
+                ]);
+            } else if ($push->type == EventPushNotification::TYPE_INVITE_REGISTER) {
+                $title = AmosEvents::t('amosevents', $push->getTitlePushNotification());
+                $text = AmosEvents::t('amosevents', $push->getTextPushNotification(), [
+                    'title' => $event->title
+                ]);
+            }
+
+
+            // PUBLICATION CONTENTS (NEWS / DISCUSSIONI / DOCUMENTI /SONDAGGI )
+        } else if ($push->type == EventPushNotification::TYPE_NEW_CONTENT) {
+            $community = $event->community;
+            if ($community) {
+                $grammar = $object->getGrammar();
+                $title = AmosEvents::t('amosevents', "Pubblicazione di")
+                    . ' '
+                    . $grammar->getIndefiniteArticle()
+                    . ' '
+                    . $grammar->getModelSingularLabel();
+
+                $text = AmosEvents::t('amosevents', "Dai un'occhiata a {title}", [
+                    'title' => $object->getTitle()
+                ]);
+            }
+
+            // COMMUNICATIONS - EVENT DATA/PLACE CHANGE
+        } else if ($push->type == EventPushNotification::TYPE_EVENT_CHANGED) {
+            $title = AmosEvents::t('amosevents', $push->getTitlePushNotification());
+            $text = AmosEvents::t('amosevents', $push->getTextPushNotification(), [
+                'TITOLO' => $event->title,
+                'DATA_INIZIO' => date('d/m/Y', strtotime($event->begin_date_hour)),
+                'DATA_FINE' => date('d/m/Y', strtotime($event->end_date_hour)),
+                'ORA_INIZIO' => date('H:i', strtotime($event->begin_date_hour)),
+                'ORA_FINE' => date('H:i', strtotime($event->end_date_hour)),
+                'LOCATION' => $event->eventLocation->name,
+                'INDIRIZZO' => $event->eventLocationEntrance->name,
+            ]);
+        }
+        return ['title' => $title, 'text' => $text];
+    }
+
+    /**
+     * @return array|string[]
+     */
+    public function actionGetLastAppVersion()
+    {
+        $ret = ['status' => 'ok', 'message' => ''];
+        try {
+            /** @var ActiveQuery $query */
+            $query = AppVersion::find();
+            $av = $query->orderBy(['version' => SORT_DESC])->one();
+            if (!empty($av)){
+                $ret['data'] = $av->attributes;
+            } else {
+                $ret = ['status' => 'error', 'message' => 'nessuna versione impostata'];
+            }
+        } catch (Exception $ex) {
+            Yii::getLogger()->log($ex->getMessage(), Logger::LEVEL_ERROR);
+            $ret = ['status' => 'error', 'message' => $ex->getMessage()];
+        }
+        return $ret;
+    }
 }

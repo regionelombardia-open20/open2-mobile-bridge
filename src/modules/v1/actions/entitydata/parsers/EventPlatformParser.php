@@ -17,7 +17,7 @@ class EventPlatformParser extends BaseParser
      * @param Event $item
      * @return array
      */
-    public static function parseItem($item)
+    public static function parseItem($item, $isDetail = false)
     {
         //The base class name
         $baseClassName = StringHelper::basename(Event::className());
@@ -43,6 +43,7 @@ class EventPlatformParser extends BaseParser
         $eventType = $item->eventType;
         $highlight = \open20\amos\events\models\EventHighlights::find()->andWhere(['event_id' => $item->id])->orderBy('id DESC')->one();
         $highlights = 0;
+        $relatedEvents = [];
         if ($highlight) {
             $highlights = $highlight->n_order;
         }
@@ -67,7 +68,6 @@ class EventPlatformParser extends BaseParser
         $owner = UserProfile::findOne(['id' => $item->created_by]);
 
         //Image
-        $image = $item->eventLogo;
         $imageUrl = $item->getMainImageEvent();
         $url = $imageUrl;
 
@@ -75,6 +75,8 @@ class EventPlatformParser extends BaseParser
 //                pr('dentro');
             $url = Yii::$app->getUrlManager()->createAbsoluteUrl($imageUrl);
         }
+
+
 
         //Fill fields from item usable in app
         $newItem['fields'] = [
@@ -126,10 +128,46 @@ class EventPlatformParser extends BaseParser
         //Can edit
         $newItem['canEdit'] = Yii::$app->user->can($editPremission, ['model' => $item]);
 
+        // DETTAGLIO EVENTI
+        if($isDetail){
+            // eventi correlati
+
+            $newItem['fields']['correlatedEvents'] = self::getRelatedEvents($item);
+        }
+
         return $newItem;
         //}
 
         //return [];
+    }
+
+    /**
+     * @param $item
+     * @return mixed
+     */
+    public static function getRelatedEvents($item){
+        $events = [];
+        if(method_exists($item, 'getCorrelatedEvents')){
+            $relatedEvents = $item->correlatedEvents;
+            foreach ($relatedEvents as $event) {
+                $imageUrl = $event->getMainImageEvent();
+                $url = $imageUrl;
+                if (strpos($imageUrl, 'https') === false) {
+//                pr('dentro');
+                    $url = Yii::$app->getUrlManager()->createAbsoluteUrl($imageUrl);
+                }
+                $events [] = [
+                    'id' => $event->id,
+                    'title' => $event->title,
+                    'description' => $event->description,
+                    'begin_date_hour' => $event->begin_date_hour,
+                    'end_date_hour' => $event->end_date_hour,
+                    'eventImageUrl' => $url ?: null,
+                    'landingUrl' => \open20\amos\events\utility\EventsUtility::getUrlLanding($event),
+                ];
+            }
+        }
+        return $events;
     }
 
     public static function getWebmeetingConfig($model)
@@ -165,7 +203,9 @@ class EventPlatformParser extends BaseParser
     public static function eventChildren($event)
     {
         $childrens = [];
-        $eventChildren = $event->getEventChildren()->all();
+        $eventChildren = $event->getEventChildren()
+            ->andWhere(['event.status' => Event::EVENTS_WORKFLOW_STATUS_PUBLISHED])
+            ->all();
         foreach ($eventChildren as $child) {
             $imageUrl = $child->getMainImageEvent();
             $url = $imageUrl;

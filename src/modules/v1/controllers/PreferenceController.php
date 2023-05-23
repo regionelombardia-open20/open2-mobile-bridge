@@ -13,6 +13,7 @@ namespace open20\amos\mobile\bridge\modules\v1\controllers;
 use backend\modules\campains\utility\CampainsQueryUtility;
 use backend\modules\campains\models\PreferenceCampainContainer;
 use backend\modules\campains\models\PreferenceCampainChannelMm;
+use common\models\AppVersion;
 use DateTime;
 use open20\amos\admin\models\UserOtpCode;
 use open20\amos\audit\components\Helper;
@@ -50,6 +51,7 @@ use yii\helpers\VarDumper;
 use yii\log\Logger;
 use yii\validators\EmailValidator;
 use yii\validators\StringValidator;
+use yii\web\BadRequestHttpException;
 use yii\web\Controller;
 use preference\userprofile\models\PersonalData;
 use yii\web\ForbiddenHttpException;
@@ -60,9 +62,13 @@ class PreferenceController extends DefaultController
      *
      * @param Action $action
      * @return bool
+     * @throws ForbiddenHttpException
+     * @throws BadRequestHttpException
      */
     public function beforeAction($action)
     {
+//        throw new ForbiddenHttpException('API non più utilizzabile - usare la forma nuova');
+
         $this->enableCsrfValidation = false;
         return parent::beforeAction($action);
     }
@@ -77,6 +83,7 @@ class PreferenceController extends DefaultController
                         'class' => VerbFilter::className(),
                         'actions' => [
                             'create-profile' => ['get'],
+                            'delete-account' => ['get'],
                             'get-channels' => ['get'],
                             'get-targets' => ['get'],
                             'get-topics' => ['get'],
@@ -93,6 +100,7 @@ class PreferenceController extends DefaultController
                             'get-comunications-by-user' => ['get'],
                             'get-comunication-by-id' => ['get'],
                             'topic' => ['get'],
+                            'get-app-last-version' => ['get'],
                         ],
                     ],
         ]);
@@ -111,6 +119,29 @@ class PreferenceController extends DefaultController
         }
 
         throw new ForbiddenHttpException('Not allowed call');
+    }
+
+    /**
+     * @return Json
+     * @throws Exception
+     */
+    public function actionGetLastAppVersion()
+    {
+        $ret = ['status' => 'ok', 'message' => ''];
+        try {
+            /** @var ActiveQuery $query */
+            $query = AppVersion::find();
+            $av = $query->orderBy(['version' => SORT_DESC])->one();
+            if (!empty($av)){
+                $ret['data'] = $av->attributes;
+            } else {
+                $ret = ['status' => 'error', 'message' => 'nessuna versione impostata'];
+            }
+        } catch (Exception $ex) {
+            Yii::getLogger()->log($ex->getMessage(), Logger::LEVEL_ERROR);
+            $ret = ['status' => 'error', 'message' => $ex->getMessage()];
+        }
+        return $ret;
     }
 
     /**
@@ -192,6 +223,39 @@ class PreferenceController extends DefaultController
             $ret = ['code' => $ex->getCode(), 'message' => $ex->getMessage()];
         }
         return Json::encode($ret);
+    }
+
+
+    /**
+     * @return array
+     * @throws Exception
+     */
+    public function actionDeleteAccount($user_id)
+    {
+        \Yii::$app->response->format = \yii\web\Response::FORMAT_JSON;
+        $ret = ['code' => 0, 'message' => 'Response OK'];
+        // VarDumper::dump(Yii::$app->user->id,3,1); die;
+        try {
+            if (Yii::$app->user->id != $user_id) {
+                throw new ForbiddenHttpException();
+            }
+            $loggedUserProfile = \preference\userprofile\models\UserProfile::findOne(['user_id' => $user_id]);
+            if (!empty($loggedUserProfile)) {
+                \preference\userprofile\utility\UserProfileUtility::deleteProfile($loggedUserProfile);
+                Yii::$app->user->logout();
+            } else {
+                throw new ForbiddenHttpException();
+            }
+        } catch (ForbiddenHttpException $ex) {
+            Yii::getLogger()->log($ex->getMessage(), Logger::LEVEL_ERROR);
+            $ret['code'] = $ex->statusCode;
+            $ret['message'] = 'Accesso negato';
+        } catch (Exception $ex) {
+            Yii::getLogger()->log($ex->getMessage(), Logger::LEVEL_ERROR);
+            $ret['code'] = 1;
+            $ret['message'] = 'Error';
+        }
+        return $ret;
     }
 
     
@@ -343,7 +407,10 @@ class PreferenceController extends DefaultController
      */
     public function actionGetTopics($targetCode, $userId = null)
     {
-        $this->checkUserSecurity($userId);
+        // $this->checkUserSecurity($userId);
+        if (empty(Yii::$app->user->id)) {
+            throw new ForbiddenHttpException('Not allowed call');
+        }
 
         \Yii::$app->response->format = \yii\web\Response::FORMAT_JSON;
         $ret = ['code' => 0, 'message' => 'Response OK'];
@@ -578,7 +645,7 @@ class PreferenceController extends DefaultController
                 $toret[$campainChannel->id]['title'] = $campainChannel->title;
                 $toret[$campainChannel->id]['topics'] = $listOfCampainItemsIds;
                 $toret[$campainChannel->id]['targets'] = $listOfCampainTargetsIds;
-                $toret[$campainChannel->id]['contents_number'] = $this->getNumberOfContentByCampainChannelAndUserTags($campainChannel, $userTags);
+                $toret[$campainChannel->id]['contents_number'] = $this->getNumberOfContentByCampainChannel($campainChannel);
             }
 
         }
@@ -641,6 +708,11 @@ class PreferenceController extends DefaultController
                             $toret['contents'][$container->id]['event_location'] = $event->location . (!empty($event->location_entrance)? (' - ' . $event->location_entrance): '');
                             $toret['contents'][$container->id]['event_start_datetime'] = $event->date_start;
                             $toret['contents'][$container->id]['event_end_datetime'] = $event->date_end;
+                        }
+                        if (!empty($container->newsInnovazione)) {
+                            $news = $container->newsInnovazione;
+                            $toret['contents'][$container->id]['oi_news_cat'] = $news->main_category;
+                            $toret['contents'][$container->id]['oi_news_pubdate'] = $news->publication_date;
                         }
                     }
                 }
@@ -939,13 +1011,6 @@ class PreferenceController extends DefaultController
 
         $this->checkUserSecurity($userId);
 
-        // Utente corrente loggato
-        $userId = \Yii::$app->user->id;
-        $userProfile = \backend\modules\pcadmin\models\UserProfile::findOne(['user_id' => $userId]);
-
-        // Tag selezionati dall'utente corrente
-        $userTags = $userProfile->getUserTags(PreferenceChannel::APP_ID);
-
         $notify = Yii::$app->getModule('notify');
         $toret = [
             'status' => null,
@@ -969,15 +1034,15 @@ class PreferenceController extends DefaultController
 
                     /** @var PreferenceCampainChannelMm $campainChannel */
                     foreach ($listOfComunications as $campainChannel) {
-                        $listItems = $this->getListOfTagByIds(array_intersect($userTags, ArrayHelper::map($campainChannel->preferenceCampain->preferenceCampainTagMms,'tag_id', 'tag_id')));
-                        $listChannels = $this->getListOfTagByIds(array_intersect($userTags, ArrayHelper::map($campainChannel->preferenceCampain->preferenceCampainTagMms,'tag_id', 'tag_id')), true);
+                        $listItems = $this->getListOfTagByIds(ArrayHelper::map($campainChannel->preferenceCampain->preferenceCampainTagMms,'tag_id', 'tag_id'));
+                        $listChannels = $this->getListOfTagByIds(ArrayHelper::map($campainChannel->preferenceCampain->preferenceCampainTagMms,'tag_id', 'tag_id'), true);
             
                         $toret['data'][$campainChannel->id]['id'] = $campainChannel->id;
                         $toret['data'][$campainChannel->id]['date'] = $campainChannel->date_app;
                         $toret['data'][$campainChannel->id]['title'] = $campainChannel->title;
                         $toret['data'][$campainChannel->id]['topics'] = $this->listOfTagToArray($listItems);
                         $toret['data'][$campainChannel->id]['targets'] = $this->listOfTagToArray($listChannels);
-                        $toret['data'][$campainChannel->id]['contents_number'] = $this->getNumberOfContentByCampainChannelAndUserTags($campainChannel, $userTags);
+                        $toret['data'][$campainChannel->id]['contents_number'] = $this->getNumberOfContentByCampainChannel($campainChannel);
                     }
                     $toret['status'] = 'ok';
 
@@ -1090,20 +1155,6 @@ class PreferenceController extends DefaultController
         $count = 0;
         foreach ($campainChannel->preferenceCampainSections as $section) {
             $count = $count + intval(PreferenceCampainContainer::find()->andWhere(['preference_campain_section_id' => $section->id])->count());
-        }
-        return $count;
-    }
-
-    private function getNumberOfContentByCampainChannelAndUserTags($campainChannel, $userTags)
-    {
-        $count = 0;
-        foreach ($campainChannel->preferenceCampainSections as $section) {
-            foreach($section->preferenceCampainContainers as $container) {
-                $containerTags = ArrayHelper::map($container->preferenceCampainContainerTagMms, 'tag_id', 'tag_id');
-                if(count(array_intersect($containerTags, $userTags)) > 0) {
-                    $count++;
-                }
-            }
         }
         return $count;
     }

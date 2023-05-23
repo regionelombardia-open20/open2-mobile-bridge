@@ -10,6 +10,12 @@
 // Server API Key (you can get it here: https://firebase.google.com/docs/server/setup#prerequisites)
 $firebaseApiKey = isset(Yii::$app->params['firebaseApiKey']) ? Yii::$app->params['firebaseApiKey'] : null;
 
+$classRequest = \yii\web\Request::className();
+if(class_exists("\luya\web\Application")) {
+    if (\Yii::$app instanceof \luya\web\Application) {
+        $classRequest = \luya\web\Request::className();
+    }
+}
 return [
     'modules' => [
         'v1' => [
@@ -23,7 +29,7 @@ return [
             'enableAutoLogin' => true,
         ],
         'request' => [
-            'class' => \yii\web\Request::className(),
+            'class' => $classRequest,
             'enableCookieValidation' => false,
             'parsers' => [
                 'application/json' => 'yii\web\JsonParser',

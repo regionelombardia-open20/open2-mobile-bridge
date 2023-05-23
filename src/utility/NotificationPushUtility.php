@@ -85,11 +85,9 @@ class NotificationPushUtility
             $notification = $note->buildMessage();
 
             foreach ($tokens as $token) {
-                if (!empty($token->fcm_token)) {
+                if (!empty($token->fcm_token) && ($token->fcm_token != 'webcms')) {
                     $expopush = new \open2\expo\ExpoPush();
-                    if ($token->fcm_token != 'webcms') {
-                        $result = $expopush->notify($token->fcm_token, $notification);
-                    }
+                    $result = $expopush->notify($token->fcm_token, $notification);
                     if ($result[0]['status'] == 'error') {
                         if ($result[0]['details']['error'] == 'DeviceNotRegistered') {
                             $token->delete();

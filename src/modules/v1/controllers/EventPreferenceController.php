@@ -4,6 +4,7 @@ namespace open20\amos\mobile\bridge\modules\v1\controllers;
 
 use open20\amos\admin\models\UserProfile;
 use open20\amos\core\helpers\StringHelper;
+use open20\amos\core\record\CachedActiveQuery;
 use open20\amos\discussioni\models\DiscussioniTopic;
 use open20\amos\documenti\models\Documenti;
 use open20\amos\events\AmosEvents;
@@ -95,6 +96,7 @@ class EventPreferenceController extends DefaultController
         if (!is_null($from_date)) {
             $search->begin_date_hour;
         }
+
         //$cwh          = $this->loadCwh();
         //$cwh->resetCwhScopeInSession();
         $dataProvider = $search->searchMyInvitations($params);
@@ -132,11 +134,14 @@ class EventPreferenceController extends DefaultController
             );
 
 
+        $cachedQuery = CachedActiveQuery::instance($query);
+        $cachedQuery->cache();
         $query->limit($limit);
 //            pr($query->createCommand()->rawSql);
         $dataProvider->query = $query;
         $dataProvider->pagination = false;
         $listModel = $dataProvider->getModels();
+
         foreach ($listModel as $model) {
             $list[] = self::parseItem($model);
         }
